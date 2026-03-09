@@ -1,6 +1,6 @@
 #pragma once
 
-#include "render/DrawList.hpp"
+#include "render/RenderList.hpp"
 
 namespace gv {
 
@@ -11,7 +11,7 @@ public:
     virtual int height() const = 0;
 
     virtual void beginFrame() = 0;
-    virtual void drawLines(const DrawList& dl) = 0;
+    virtual void draw(const RenderList& rl) = 0;
     virtual void endFrame() = 0;
 };
 

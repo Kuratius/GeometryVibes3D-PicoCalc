@@ -1,5 +1,5 @@
 #pragma once
-#include "app/Config.hpp"
+#include "game/Config.hpp"
 #include "render/Fixed.hpp"
 
 namespace gv {

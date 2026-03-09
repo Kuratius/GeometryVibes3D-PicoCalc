@@ -1,7 +1,8 @@
 #pragma once
+
 #include "../IDisplay.hpp"
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 
 namespace gv {
 
@@ -10,17 +11,17 @@ public:
     Ili9488Display();
     ~Ili9488Display();
 
-    int width()  const override { return W; }
+    int width() const override  { return W; }
     int height() const override { return H; }
 
     void beginFrame() override;
-    void drawLines(const DrawList& dl) override;
+    void draw(const RenderList& rl) override;
     void endFrame() override;
 
     static constexpr int W = 320;
     static constexpr int H = 320;
     static constexpr int SLAB_ROWS = 8;
-    
+
 private:
     static constexpr unsigned SPI_BAUD_HZ = 62'500'000;
 
@@ -35,8 +36,6 @@ private:
     static constexpr int MAX_LINES          = 2048;
     static constexpr int MAX_BINNED_ENTRIES = 8192;
 
-    bool inited = false;
-
     struct Line {
         int16_t x0, y0, x1, y1;
         uint16_t c565;
@@ -46,24 +45,25 @@ private:
         int lineCount = 0;
         Line lines[MAX_LINES];
 
+        // Per-slab bins for the lines that touch each vertical slab.
         uint16_t slabCount[NUM_SLABS]{};
         uint16_t slabOffset[NUM_SLABS + 1]{};
         uint16_t slabCursor[NUM_SLABS]{};
         uint16_t slabIndices[MAX_BINNED_ENTRIES]{};
+
         int binnedTotal = 0;
     };
 
-    // Two frames for pipelining
+    bool inited = false;
+
     static Frame s_frame[2];
     static volatile bool s_slotReady[2];
-    static volatile int  s_prod;   // core0 writes this slot
+    static volatile int s_prod;
     static Ili9488Display* s_active;
 
-    // Stats (core0)
     int lastLines = 0;
     int lastBinned = 0;
 
-private:
     void lcdFillBlack();
     void initIfNeeded();
     void lcdReset();
@@ -73,18 +73,21 @@ private:
     void writeData(const uint8_t* data, size_t n);
     void writeDataByte(uint8_t b);
 
-    // Core0: line clipping + binning into the producer frame
     static bool clipLineToRect(int& x0, int& y0, int& x1, int& y1,
                                int xmin, int ymin, int xmax, int ymax);
     static void binFrameLines(Frame& f);
 
-    // Core1: render+flush consumer slot
     static void core1_entry();
     void renderAndFlushFrame(const Frame& f);
 
-    // Slab raster helpers (core1)
-    static inline void plotSlab(uint16_t* slab, int x, int yLocal, uint16_t c_swapped);
-    static void drawLineIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
+    static inline void plotSlab(uint16_t* slab, int x, int yLocal, uint16_t c565);
+
+    // Dispatch to the major-axis slab rasterizer.
+    void drawLineIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
+
+    // Use one global line equation and only walk the span relevant to this slab.
+    void drawLineXMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
+    void drawLineYMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
 };
 
 } // namespace gv

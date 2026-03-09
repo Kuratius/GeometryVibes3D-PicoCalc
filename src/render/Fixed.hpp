@@ -143,4 +143,30 @@ inline constexpr fx subSat(fx a, fx b) {
     return fx::fromRaw((int32_t)s);
 }
 
+inline constexpr gv::fx fxRoundMul(gv::fx val, gv::fx frac) {
+    using gv::fx;
+    constexpr int SHIFT = fx::SHIFT;
+    constexpr int64_t HALF = 1ll << (SHIFT - 1);
+
+    const int64_t prod = (int64_t)val.raw() * (int64_t)frac.raw();
+    const int64_t raw = (prod >= 0) ? ((prod + HALF) >> SHIFT)
+                                    : -(((-prod) + HALF) >> SHIFT);
+    return fx::fromRaw((int32_t)raw);
+}
+
+inline constexpr int fxFloorToInt(gv::fx a) {
+    return a.raw() >> gv::fx::SHIFT;
+}
+
+inline constexpr int fxCeilToInt(gv::fx a) {
+    const int32_t raw = a.raw();
+    const int32_t mask = (1 << gv::fx::SHIFT) - 1;
+    if ((raw & mask) == 0) return raw >> gv::fx::SHIFT;
+    return (raw >= 0) ? ((raw >> gv::fx::SHIFT) + 1) : (raw >> gv::fx::SHIFT);
+}
+
+inline constexpr gv::fx snapFxToTarget(gv::fx val, gv::fx target, gv::fx tol) {
+    return (gv::abs(val - target) <= tol) ? target : val;
+}
+
 } // namespace gv

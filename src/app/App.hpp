@@ -2,25 +2,26 @@
 #include "platform/IPlatform.hpp"
 #include "game/Game.hpp"
 #include "render/Renderer.hpp"
-#include "render/DrawList.hpp"
+#include "render/RenderList.hpp"
 
 namespace gv {
 
 class App {
 public:
+    // Owns init + main loop
     int run(IPlatform& platform);
 
 private:
-    void init(IPlatform& platform, int screenW, int screenH);
+    void init(IPlatform& platform);
     void tick(const InputState& in, uint32_t dtUs);
 
-    const DrawList& drawList() const { return dl; }
+    const RenderList& renderList() const { return rl; }
 
 private:
     IPlatform* plat = nullptr;
     Game game;
     Renderer renderer;
-    DrawList dl;
+    RenderList rl;
     int w{}, h{};
 };
 

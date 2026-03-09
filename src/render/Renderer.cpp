@@ -1,5 +1,5 @@
 #include "Renderer.hpp"
-#include "app/Config.hpp"
+#include "game/Config.hpp"
 #include "game/Game.hpp"
 #include "game/Playfield.hpp"
 #include "game/LevelMath.hpp"
@@ -17,10 +17,10 @@ static inline Vec3fx add3(const Vec3fx& a, const Vec3fx& b) {
     return Vec3fx{ a.x + b.x, a.y + b.y, a.z + b.z };
 }
 
-static inline void line3(const Vec3fx& A, const Vec3fx& B, uint16_t color, const Camera& cam, DrawList& dl) {
+static inline void line3(const Vec3fx& A, const Vec3fx& B, uint16_t color, const Camera& cam, RenderList& rl) {
     Vec2i a, b;
     if (projectPoint(cam, A, a) && projectPoint(cam, B, b))
-        dl.addLine(a.x, a.y, b.x, b.y, color);
+        rl.addLine(a.x, a.y, b.x, b.y, color);
 }
 
 static inline int iabs(int v) { return v < 0 ? -v : v; }
@@ -51,7 +51,7 @@ void Renderer::trailPushLevelPoint(fx levelX, fx y, fx z) const {
     if (trailCount_ < kTrailMax) ++trailCount_;
 }
 
-void Renderer::trailDraw(DrawList& dl, fx scrollX, uint16_t color) const {
+void Renderer::trailDraw(RenderList& rl, fx scrollX, uint16_t color) const {
     if (trailCount_ < 2) return;
 
     const int start = (trailHead_ - trailCount_ + kTrailMax) % kTrailMax;
@@ -74,14 +74,14 @@ void Renderer::trailDraw(DrawList& dl, fx scrollX, uint16_t color) const {
         }
 
         if (havePrev) {
-            dl.addLine(prev.x, prev.y, cur.x, cur.y, color);
+            rl.addLine(prev.x, prev.y, cur.x, cur.y, color);
         }
         prev = cur;
         havePrev = true;
     }
 }
 
-void Renderer::addShip(DrawList &dl, const Vec3fx &pos, uint16_t color, fx shipY, fx shipVy) const
+void Renderer::addShip(RenderList &rl, const Vec3fx &pos, uint16_t color, fx shipY, fx shipVy) const
 {
     // Size is about half a cell wide.
     const fx halfW = fi(kCellSize/4);
@@ -133,20 +133,20 @@ void Renderer::addShip(DrawList &dl, const Vec3fx &pos, uint16_t color, fx shipY
     auto add = [&](const Vec3fx& p) { return Vec3fx{ pos.x + p.x, pos.y + p.y, pos.z + p.z }; };
 
     // Wireframe edges.
-    line3(add(a0), add(a1), color, cam, dl);
-    line3(add(a1), add(a2), color, cam, dl);
-    line3(add(a2), add(a0), color, cam, dl);
+    line3(add(a0), add(a1), color, cam, rl);
+    line3(add(a1), add(a2), color, cam, rl);
+    line3(add(a2), add(a0), color, cam, rl);
 
-    line3(add(b0), add(b1), color, cam, dl);
-    line3(add(b1), add(b2), color, cam, dl);
-    line3(add(b2), add(b0), color, cam, dl);
+    line3(add(b0), add(b1), color, cam, rl);
+    line3(add(b1), add(b2), color, cam, rl);
+    line3(add(b2), add(b0), color, cam, rl);
 
-    line3(add(a0), add(b0), color, cam, dl);
-    line3(add(a1), add(b1), color, cam, dl);
-    line3(add(a2), add(b2), color, cam, dl);
+    line3(add(a0), add(b0), color, cam, rl);
+    line3(add(a1), add(b1), color, cam, rl);
+    line3(add(a2), add(b2), color, cam, rl);
 }
 
-void Renderer::addCube(DrawList &dl, const Vec3fx &pos, uint16_t color) const
+void Renderer::addCube(RenderList &rl, const Vec3fx &pos, uint16_t color) const
 {
     const Vec3fx verts[] = {
         { fx::zero(),    fx::zero(),    fx::zero()    }, { fi(kCellSize), fx::zero(),    fx::zero()    },
@@ -164,11 +164,11 @@ void Renderer::addCube(DrawList &dl, const Vec3fx &pos, uint16_t color) const
     for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
         Vec3fx vA = add3(pos, verts[indices[i]]);
         Vec3fx vB = add3(pos, verts[indices[i+1]]);
-        line3(vA, vB, color, cam, dl);
+        line3(vA, vB, color, cam, rl);
     }
 }
 
-void Renderer::addSquarePyramid(DrawList& dl, const Vec3fx& pos, uint16_t color,
+void Renderer::addSquarePyramid(RenderList& rl, const Vec3fx& pos, uint16_t color,
                                 ModId mod, fx apexScale, const Vec3fx& origin) const
 {
     const Vec3fx verts[] = {
@@ -191,12 +191,12 @@ void Renderer::addSquarePyramid(DrawList& dl, const Vec3fx& pos, uint16_t color,
         applyMod3(mod, origin, vA);
         applyMod3(mod, origin, vB);
 
-        line3(vA, vB, color, cam, dl);
+        line3(vA, vB, color, cam, rl);
     }
 }
 
-void Renderer::addRightTriPrism(DrawList& dl, const Vec3fx& pos, uint16_t color,
-                                ModId mod, const Vec3fx& origin) const
+void Renderer::addRightTriPrism(RenderList& rl, const Vec3fx& pos, uint16_t color,
+                               ModId mod, const Vec3fx& origin) const
 {
     // Right triangle prism with right angle at bottom-right.
     const Vec3fx verts[] = {
@@ -221,12 +221,12 @@ void Renderer::addRightTriPrism(DrawList& dl, const Vec3fx& pos, uint16_t color,
         applyMod3(mod, origin, vA);
         applyMod3(mod, origin, vB);
 
-        line3(vA, vB, color, cam, dl);
+        line3(vA, vB, color, cam, rl);
     }
 }
 
 static inline void rectWireXZ(
-    DrawList& dl, const Camera& cam,
+    RenderList& rl, const Camera& cam,
     fx x0, fx x1, fx y, fx z0, fx z1,
     uint16_t color)
 {
@@ -235,13 +235,13 @@ static inline void rectWireXZ(
     Vec3fx p11{ x1, y, z1 };
     Vec3fx p01{ x0, y, z1 };
 
-    line3(p00, p10, color, cam, dl);
-    line3(p10, p11, color, cam, dl);
-    line3(p11, p01, color, cam, dl);
-    line3(p01, p00, color, cam, dl);
+    line3(p00, p10, color, cam, rl);
+    line3(p10, p11, color, cam, rl);
+    line3(p11, p01, color, cam, rl);
+    line3(p01, p00, color, cam, rl);
 }
 
-void Renderer::buildScene(DrawList& dl, const Game& game, fx scrollX) const
+void Renderer::buildScene(RenderList& rl, const Game& game, fx scrollX) const
 {
     const uint16_t kWire   = 0xFFFF; // white
     const uint16_t kGreen  = 0x07E0; // green
@@ -271,8 +271,8 @@ void Renderer::buildScene(DrawList& dl, const Game& game, fx scrollX) const
     const fx xLeft  = fx::fromInt(col0 * kCellSize) - scrollX + fx::fromInt(kShipFixedX) - fi(kCellSize * 2);
     const fx xRight = fx::fromInt(col1 * kCellSize) - scrollX + fx::fromInt(kShipFixedX) + fi(kCellSize * 2);
 
-    rectWireXZ(dl, cam, xLeft, xRight, yTop, z0, z1, kWire);
-    rectWireXZ(dl, cam, xLeft, xRight, yBot, z0, z1, kWire);
+    rectWireXZ(rl, cam, xLeft, xRight, yTop, z0, z1, kWire);
+    rectWireXZ(rl, cam, xLeft, xRight, yBot, z0, z1, kWire);
 
     // ---- Stream + render level ----
     Column56 col{};
@@ -297,19 +297,19 @@ void Renderer::buildScene(DrawList& dl, const Game& game, fx scrollX) const
 
             switch (sid) {
                 case ShapeId::Square:
-                    addCube(dl, {worldX, worldY, cz}, kGreen);
+                    addCube(rl, {worldX, worldY, cz}, kGreen);
                     break;
 
                 case ShapeId::RightTri:
-                    addRightTriPrism(dl, {worldX, worldY, cz}, kGreen, mid, {ox, oy, cz});
+                    addRightTriPrism(rl, {worldX, worldY, cz}, kGreen, mid, {ox, oy, cz});
                     break;
 
                 case ShapeId::HalfSpike:
-                    addSquarePyramid(dl, {worldX, worldY, cz}, kGreen, mid, fx::half(), {ox, oy, cz});
+                    addSquarePyramid(rl, {worldX, worldY, cz}, kGreen, mid, fx::half(), {ox, oy, cz});
                     break;
 
                 case ShapeId::FullSpike:
-                    addSquarePyramid(dl, {worldX, worldY, cz}, kGreen, mid, fx::one(), {ox, oy, cz});
+                    addSquarePyramid(rl, {worldX, worldY, cz}, kGreen, mid, fx::one(), {ox, oy, cz});
                     break;
 
                 default:
@@ -334,7 +334,7 @@ void Renderer::buildScene(DrawList& dl, const Game& game, fx scrollX) const
                 if (row > (kLevelHeight - 1)) row = (kLevelHeight - 1);
 
                 const fx pyWorld = worldYForRow(row);
-                addCube(dl, {px, pyWorld, cz}, kPurple);
+                addCube(rl, {px, pyWorld, cz}, kPurple);
             }
         }
     }
@@ -343,14 +343,14 @@ void Renderer::buildScene(DrawList& dl, const Game& game, fx scrollX) const
     const Vec3fx shipPos{ game.shipRenderX(), game.ship().y, fi(kCellSize/2) };
 
     // Trail is drawn first so the ship sits on top.
-    trailDraw(dl, scrollX, kCyan);
+    trailDraw(rl, scrollX, kCyan);
 
     // Trail samples are stored in level-space so they drift left as scrollX advances.
     // Ship level-space X is scrollX plus any fly-out offset.
     const fx shipLevelX = scrollX + (game.shipRenderX() - fx::fromInt(kShipFixedX));
     trailPushLevelPoint(shipLevelX, game.ship().y, fi(kCellSize/2));
 
-    addShip(dl, shipPos, kShip, game.ship().y, game.ship().vy);
+    addShip(rl, shipPos, kShip, game.ship().y, game.ship().vy);
 }
 
 } // namespace gv

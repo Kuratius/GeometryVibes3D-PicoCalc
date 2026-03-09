@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "app/Config.hpp"
+#include "game/Config.hpp"
 
 namespace gv {
 

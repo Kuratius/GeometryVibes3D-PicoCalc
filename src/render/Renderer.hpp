@@ -16,6 +16,7 @@ public:
     const Camera& camera() const { return cam; }
 
     void buildScene(RenderList& rl, const Game& game, fx scrollX) const;
+    void buildOverlay(RenderList& rl, const Game& game) const;
 
 private:
     Camera cam{};
@@ -34,7 +35,7 @@ private:
 private:
     // --- Shape constructors ---
     void addShip(RenderList& rl, const Vec3fx& pos, uint16_t color, fx shipY, fx shipVy) const;
-    
+
     void addCube(RenderList& rl, const Vec3fx& pos, uint16_t color) const;
 
     void addSquarePyramid(RenderList& rl, const Vec3fx& pos, uint16_t color,
@@ -42,6 +43,8 @@ private:
 
     void addRightTriPrism(RenderList& rl, const Vec3fx& pos, uint16_t color,
                           ModId mod, const Vec3fx& origin) const;
+
+    void addText(RenderList& rl, const Text& text, int16_t x, int16_t y, uint16_t color) const;
 
 private:
     void trailPushLevelPoint(fx levelX, fx y, fx z) const;

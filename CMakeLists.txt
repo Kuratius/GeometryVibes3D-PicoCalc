@@ -37,19 +37,20 @@ pico_sdk_init()
 add_executable(GeometryVibes3D-PicoCalc
     src/main.cpp
     src/app/App.cpp
+    src/game/Hud.cpp
     src/game/Game.cpp
+    src/render/Text.cpp
+    src/render/Font8x8.cpp
     src/render/Project.cpp
     src/render/Renderer.cpp
-    src/render/Font8x8.cpp
-    src/render/Text.cpp
-    src/platform/pico/Ili9488Display.cpp
+    src/platform/pico/PicoInput.cpp
     src/platform/pico/PicoPlatform.cpp
     src/platform/pico/PicoFileSystem.cpp
-    src/platform/pico/PicoInput.cpp
+    src/platform/pico/Ili9488Display.cpp
 
-    src/platform/pico/drivers/sdcard.c
-    src/platform/pico/drivers/fat32.c
     src/platform/pico/drivers/clib.c
+    src/platform/pico/drivers/fat32.c
+    src/platform/pico/drivers/sdcard.c
     src/platform/pico/drivers/southbridge.c
 )
 

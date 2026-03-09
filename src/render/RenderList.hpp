@@ -45,8 +45,8 @@ struct RenderList {
         return sprites_.push_back(SpriteInst{ spriteId, x, y });
     }
 
-    bool addText(const CachedText* text, int16_t x, int16_t y, uint16_t color565) {
-        return text && texts_.push_back(TextInst{ text, x, y, color565 });
+    bool addText(const Text* text, int16_t x, int16_t y, uint16_t color565, bool inverted = false) {
+        return text && texts_.push_back(TextInst{ text, x, y, color565, inverted });
     }
 
     const gv::StaticVector<Line2D, LINE_CAP>& lines() const { return lines_; }

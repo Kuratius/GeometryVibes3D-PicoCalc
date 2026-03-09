@@ -89,6 +89,7 @@ void Ili9488Display::draw(const RenderList& rl) {
 
     Frame& f = s_frame[(int)s_prod];
     f.lineCount = 0;
+    f.textCount = 0;
 
     for (const auto& ln : rl.lines()) {
         if (f.lineCount >= MAX_LINES) break;
@@ -98,7 +99,6 @@ void Ili9488Display::draw(const RenderList& rl) {
         int x1 = ln.x1;
         int y1 = ln.y1;
 
-        // Cull to the screen once so slab rendering only deals with visible spans.
         if (!clipLineToRect(x0, y0, x1, y1, 0, 0, W - 1, H - 1))
             continue;
 
@@ -110,10 +110,19 @@ void Ili9488Display::draw(const RenderList& rl) {
         out.c565 = ln.color565;
     }
 
+    for (const auto& txt : rl.texts()) {
+        if (f.textCount >= MAX_TEXTS) break;
+        if (!txt.text) continue;
+        if (txt.text->empty()) continue;
+        f.texts[f.textCount++] = txt;
+    }
+
     binFrameLines(f);
+    binFrameTexts(f);
 
     lastLines  = f.lineCount;
-    lastBinned = f.binnedTotal;
+    lastBinned = f.lineBinnedTotal;
+    lastTexts  = f.textCount;
 }
 
 void Ili9488Display::endFrame() {
@@ -317,8 +326,8 @@ bool Ili9488Display::clipLineToRect(int& x0, int& y0, int& x1, int& y1,
 }
 
 void Ili9488Display::binFrameLines(Frame& f) {
-    std::memset(f.slabCount, 0, sizeof(f.slabCount));
-    f.binnedTotal = 0;
+    std::memset(f.lineSlabCount, 0, sizeof(f.lineSlabCount));
+    f.lineBinnedTotal = 0;
 
     const int n = f.lineCount;
 
@@ -339,22 +348,22 @@ void Ili9488Display::binFrameLines(Frame& f) {
         const int s1 = y1 / SLAB_ROWS;
 
         for (int s = s0; s <= s1; ++s) {
-            if (f.slabCount[s] != 0xFFFF) {
-                ++f.slabCount[s];
+            if (f.lineSlabCount[s] != 0xFFFF) {
+                ++f.lineSlabCount[s];
             }
         }
     }
 
-    f.slabOffset[0] = 0;
+    f.lineSlabOffset[0] = 0;
     for (int s = 0; s < NUM_SLABS; ++s) {
-        int next = (int)f.slabOffset[s] + (int)f.slabCount[s];
-        if (next > MAX_BINNED_ENTRIES) next = MAX_BINNED_ENTRIES;
-        f.slabOffset[s + 1] = (uint16_t)next;
+        int next = (int)f.lineSlabOffset[s] + (int)f.lineSlabCount[s];
+        if (next > MAX_LINE_BINNED) next = MAX_LINE_BINNED;
+        f.lineSlabOffset[s + 1] = (uint16_t)next;
     }
-    f.binnedTotal = f.slabOffset[NUM_SLABS];
+    f.lineBinnedTotal = f.lineSlabOffset[NUM_SLABS];
 
     for (int s = 0; s < NUM_SLABS; ++s) {
-        f.slabCursor[s] = f.slabOffset[s];
+        f.lineSlabCursor[s] = f.lineSlabOffset[s];
     }
 
     for (int i = 0; i < n; ++i) {
@@ -374,10 +383,81 @@ void Ili9488Display::binFrameLines(Frame& f) {
         const int s1 = y1 / SLAB_ROWS;
 
         for (int s = s0; s <= s1; ++s) {
-            const uint16_t idx = f.slabCursor[s];
-            if (idx < f.slabOffset[s + 1] && idx < MAX_BINNED_ENTRIES) {
-                f.slabIndices[idx] = (uint16_t)i;
-                f.slabCursor[s] = (uint16_t)(idx + 1);
+            const uint16_t idx = f.lineSlabCursor[s];
+            if (idx < f.lineSlabOffset[s + 1] && idx < MAX_LINE_BINNED) {
+                f.lineSlabIndices[idx] = (uint16_t)i;
+                f.lineSlabCursor[s] = (uint16_t)(idx + 1);
+            }
+        }
+    }
+}
+
+void Ili9488Display::binFrameTexts(Frame& f) {
+    std::memset(f.textSlabCount, 0, sizeof(f.textSlabCount));
+    f.textBinnedTotal = 0;
+
+    for (int i = 0; i < f.textCount; ++i) {
+        const TextInst& t = f.texts[i];
+        if (!t.text) continue;
+
+        const int x0 = t.x;
+        const int y0 = t.y;
+        const int x1 = x0 + t.text->width() - 1;
+        const int y1 = y0 + t.text->height() - 1;
+
+        if (x1 < 0 || x0 >= W || y1 < 0 || y0 >= H) continue;
+
+        int cy0 = y0;
+        int cy1 = y1;
+        if (cy0 < 0) cy0 = 0;
+        if (cy1 >= H) cy1 = H - 1;
+
+        const int s0 = cy0 / SLAB_ROWS;
+        const int s1 = cy1 / SLAB_ROWS;
+
+        for (int s = s0; s <= s1; ++s) {
+            if (f.textSlabCount[s] != 0xFFFF) {
+                ++f.textSlabCount[s];
+            }
+        }
+    }
+
+    f.textSlabOffset[0] = 0;
+    for (int s = 0; s < NUM_SLABS; ++s) {
+        int next = (int)f.textSlabOffset[s] + (int)f.textSlabCount[s];
+        if (next > MAX_TEXT_BINNED) next = MAX_TEXT_BINNED;
+        f.textSlabOffset[s + 1] = (uint16_t)next;
+    }
+    f.textBinnedTotal = f.textSlabOffset[NUM_SLABS];
+
+    for (int s = 0; s < NUM_SLABS; ++s) {
+        f.textSlabCursor[s] = f.textSlabOffset[s];
+    }
+
+    for (int i = 0; i < f.textCount; ++i) {
+        const TextInst& t = f.texts[i];
+        if (!t.text) continue;
+
+        const int x0 = t.x;
+        const int y0 = t.y;
+        const int x1 = x0 + t.text->width() - 1;
+        const int y1 = y0 + t.text->height() - 1;
+
+        if (x1 < 0 || x0 >= W || y1 < 0 || y0 >= H) continue;
+
+        int cy0 = y0;
+        int cy1 = y1;
+        if (cy0 < 0) cy0 = 0;
+        if (cy1 >= H) cy1 = H - 1;
+
+        const int s0 = cy0 / SLAB_ROWS;
+        const int s1 = cy1 / SLAB_ROWS;
+
+        for (int s = s0; s <= s1; ++s) {
+            const uint16_t idx = f.textSlabCursor[s];
+            if (idx < f.textSlabOffset[s + 1] && idx < MAX_TEXT_BINNED) {
+                f.textSlabIndices[idx] = (uint16_t)i;
+                f.textSlabCursor[s] = (uint16_t)(idx + 1);
             }
         }
     }
@@ -508,6 +588,46 @@ void Ili9488Display::drawLineYMajorIntoSlab(uint16_t* slab, int slabY0, int slab
     }
 }
 
+void Ili9488Display::drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, const TextInst& inst) {
+    const Text* text = inst.text;
+    if (!text) return;
+
+    const int textW = text->width();
+    const int textH = text->height();
+    if (textW <= 0 || textH <= 0) return;
+
+    const int dstX0 = inst.x;
+    const int dstY0 = inst.y;
+    const int dstX1 = dstX0 + textW - 1;
+    const int dstY1 = dstY0 + textH - 1;
+
+    if (dstX1 < 0 || dstX0 >= W || dstY1 < slabY0 || dstY0 > slabY1) {
+        return;
+    }
+
+    const int xStart = (dstX0 < 0) ? 0 : dstX0;
+    const int xEnd   = (dstX1 >= W) ? (W - 1) : dstX1;
+
+    const int yStart = (dstY0 < slabY0) ? slabY0 : dstY0;
+    const int yEnd   = (dstY1 > slabY1) ? slabY1 : dstY1;
+
+    const uint16_t fgColor = inst.inverted ? 0u : inst.color565;
+    const uint16_t bgColor = inst.inverted ? inst.color565 : 0u;
+    for (int y = yStart; y <= yEnd; ++y) {
+        const int ty = y - dstY0;
+        const int yLocal = y - slabY0;
+
+        for (int x = xStart; x <= xEnd; ++x) {
+            const int tx = x - dstX0;
+            if (text->testPixel(tx, ty)) {
+                slab[yLocal * W + x] = fgColor;
+            } else if (inst.inverted) {
+                slab[yLocal * W + x] = bgColor;
+            }
+        }
+    }
+}
+
 void Ili9488Display::renderAndFlushFrame(const Frame& f) {
     setAddrWindow(0, 0, W - 1, H - 1);
 
@@ -521,18 +641,34 @@ void Ili9488Display::renderAndFlushFrame(const Frame& f) {
         const int slabY0 = slabIndex * SLAB_ROWS;
         int slabY1 = slabY0 + SLAB_ROWS - 1;
         if (slabY1 >= H) slabY1 = H - 1;
-        const int rows = slabY1 - slabY0 + 1;
 
+        const int rows = slabY1 - slabY0 + 1;
         uint16_t* slab = s_slabBuf[ping];
+
+        // Clear only the rows used by this slab.
         std::memset(slab, 0, W * rows * sizeof(uint16_t));
 
-        const uint16_t a = f.slabOffset[slabIndex];
-        const uint16_t b = f.slabCursor[slabIndex];
-        for (uint16_t k = a; k < b; ++k) {
-            const Line& ln = f.lines[f.slabIndices[k]];
-            drawLineIntoSlab(slab, slabY0, slabY1, ln);
+        // Draw world lines first.
+        {
+            const uint16_t a = f.lineSlabOffset[slabIndex];
+            const uint16_t b = f.lineSlabCursor[slabIndex];
+            for (uint16_t k = a; k < b; ++k) {
+                const Line& ln = f.lines[f.lineSlabIndices[k]];
+                drawLineIntoSlab(slab, slabY0, slabY1, ln);
+            }
         }
 
+        // Draw screen-space text after lines so it appears on top.
+        {
+            const uint16_t a = f.textSlabOffset[slabIndex];
+            const uint16_t b = f.textSlabCursor[slabIndex];
+            for (uint16_t k = a; k < b; ++k) {
+                const TextInst& txt = f.texts[f.textSlabIndices[k]];
+                drawTextIntoSlab(slab, slabY0, slabY1, txt);
+            }
+        }
+
+        // Once the first slab has started DMA, wait before reusing the other buffer.
         if (slabIndex != 0) {
             wait_for_spi_dma_idle();
         }

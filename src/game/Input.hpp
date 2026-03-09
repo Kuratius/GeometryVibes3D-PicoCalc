@@ -5,10 +5,10 @@ namespace gv {
 struct InputState {
     bool thrust = false;
 
-    bool up = false;
-    bool down = false;
-    bool left = false;
-    bool right = false;
+    bool upPressed = false;
+    bool downPressed = false;
+    bool leftPressed = false;
+    bool rightPressed = false;
 
     bool confirm = false;        // "pressed this frame"
     bool back = false;           // "pressed this frame"

@@ -1,6 +1,7 @@
 #include "Renderer.hpp"
 #include "game/Config.hpp"
 #include "game/Game.hpp"
+#include "game/Hud.hpp"
 #include "game/Playfield.hpp"
 #include "game/LevelMath.hpp"
 
@@ -225,6 +226,12 @@ void Renderer::addRightTriPrism(RenderList& rl, const Vec3fx& pos, uint16_t colo
     }
 }
 
+void Renderer::addText(RenderList& rl, const Text& text, int16_t x, int16_t y, uint16_t color) const {
+    if (!text.empty()) {
+        rl.addText(&text, x, y, color);
+    }
+}
+
 static inline void rectWireXZ(
     RenderList& rl, const Camera& cam,
     fx x0, fx x1, fx y, fx z0, fx z1,
@@ -351,6 +358,31 @@ void Renderer::buildScene(RenderList& rl, const Game& game, fx scrollX) const
     trailPushLevelPoint(shipLevelX, game.ship().y, fi(kCellSize/2));
 
     addShip(rl, shipPos, kShip, game.ship().y, game.ship().vy);
+}
+
+void Renderer::buildOverlay(RenderList& rl, const Game& game) const {
+    static constexpr uint16_t kHud = 0xFFFF; // white
+
+    const Hud& hud = game.hud();
+
+    addText(rl, hud.controlsHint(), 4, 4, kHud);
+
+    const int levelW = hud.levelLabel().width();
+    if (levelW > 0) {
+        addText(rl, hud.levelLabel(), int16_t((320 - levelW) / 2), 4, kHud);
+    }
+
+    const int progressW = hud.progress().width();
+    if (progressW > 0) {
+        addText(rl, hud.progress(), int16_t(320 - 4 - progressW), 4, kHud);
+    }
+
+    if (hud.eventVisible()) {
+        const uint16_t eventColor = hud.eventColor();
+        if (eventColor != 0) {
+            addText(rl, hud.eventText(), 4, int16_t(320 - 12), eventColor);
+        }
+    }
 }
 
 } // namespace gv

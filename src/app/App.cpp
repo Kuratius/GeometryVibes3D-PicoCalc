@@ -4,14 +4,24 @@
 namespace gv {
 
 int App::run(IPlatform& platform) {
-    plat = &platform;
+    static constexpr uint32_t kFrameUs = 33333; // ~30 FPS
 
+    plat = &platform;
     init(*plat);
 
-    while (true) {
-        const uint32_t dt = plat->dtUs();
+    uint32_t accumUs = 0;
 
-        // InputState mapping lives at the app layer now.
+    while (true) {
+        uint32_t dtUs = plat->dtUs();
+        if (dtUs > 250000) dtUs = 250000;
+        accumUs += dtUs;
+
+        if (accumUs < kFrameUs) {
+            continue;
+        }
+
+        // Sample input only when a simulation step will run so pressed-edge events
+        // stay aligned with the frame/update cadence.
         plat->input().update();
         const IInput& kb = plat->input();
 
@@ -19,17 +29,20 @@ int App::run(IPlatform& platform) {
         in.thrust        = kb.down(KEY_SPACE);
         in.thrustPressed = kb.pressed(KEY_SPACE);
 
-        in.up    = kb.down(KEY_UP);
-        in.down  = kb.down(KEY_DOWN);
-        in.left  = kb.down(KEY_LEFT);
-        in.right = kb.down(KEY_RIGHT);
+        in.upPressed    = kb.pressed(KEY_UP);
+        in.downPressed  = kb.pressed(KEY_DOWN);
+        in.leftPressed  = kb.pressed(KEY_LEFT);
+        in.rightPressed = kb.pressed(KEY_RIGHT);
 
         in.confirm = kb.pressed(KEY_ENTER) || kb.pressed(KEY_RETURN);
         in.back    = kb.pressed(KEY_ESC)   || kb.pressed(KEY_BACKSPACE);
         in.pausePressed = kb.pressed(KEY_ESC) || kb.pressed(KEY_F1) || kb.pressed(KEY_POWER);
 
+        accumUs -= kFrameUs;
+
+        tick(in, kFrameUs);
+
         plat->display().beginFrame();
-        tick(in, dt);
         plat->display().draw(renderList());
         plat->display().endFrame();
     }
@@ -40,16 +53,16 @@ int App::run(IPlatform& platform) {
 void App::init(IPlatform& platform) {
     plat->init();
     (void)plat->fs().init();
-    
-    w = plat->display().width(); h = plat->display().height();
+
+    w = plat->display().width();
+    h = plat->display().height();
 
     game.reset();
-
-    // Game uses IFileSystem for level streaming.
     game.setFileSystem(&platform.fs());
 
-    // Load first level (I ignore failure for now; later I can add an on-screen indicator).
-    (void)game.loadLevel("levels/L02.BIN");
+    for (std::size_t i = 0; i < kLevelCount; ++i) {
+        levelTexts_[i].setText(kLevels[i].name);
+    }
 
     Camera cam{};
     cam.focal = fx::fromInt(180);
@@ -61,15 +74,84 @@ void App::init(IPlatform& platform) {
     cam.up     = Vec3fx{ fx::fromInt(0),   fx::fromInt(1),  fx::fromInt(0) };
 
     renderer.setCamera(cam);
+
+    appState_ = AppState::LevelSelect;
+    selectedLevel_ = 0;
+}
+
+bool App::loadSelectedLevel() {
+    if (!plat) return false;
+    if (selectedLevel_ >= kLevelCount) return false;
+
+    game.reset();
+    game.setFileSystem(&plat->fs());
+
+    const LevelEntry& e = kLevels[selectedLevel_];
+    if (!game.loadLevel(e.path)) {
+        return false;
+    }
+
+    appState_ = AppState::Playing;
+    return true;
+}
+
+void App::buildLevelSelect(RenderList& rl) const {
+    static constexpr uint16_t kWhite = 0xFFFF;
+
+    const int titleX = (w - menuTitle_.width()) / 2;
+    rl.addText(&menuTitle_, (int16_t)titleX, 12, kWhite);
+
+    const int startY = 40;
+    const int lineStep = 12;
+    const int itemX = 16;
+
+    for (std::size_t i = 0; i < kLevelCount; ++i) {
+        const bool selected = (i == selectedLevel_);
+        rl.addText(&levelTexts_[i], (int16_t)itemX, (int16_t)(startY + int(i) * lineStep), kWhite, selected);
+    }
 }
 
 void App::tick(const InputState& in, uint32_t dtUs) {
+    if (appState_ == AppState::LevelSelect) {
+        if (in.upPressed && selectedLevel_ > 0) {
+            --selectedLevel_;
+        } else if (in.downPressed && (selectedLevel_ + 1) < kLevelCount) {
+            ++selectedLevel_;
+        }
+
+        if (in.confirm || in.thrustPressed) {
+            (void)loadSelectedLevel();
+        }
+
+        rl.clear();
+        buildLevelSelect(rl);
+        return;
+    }
+
     const fx dt = fx::fromMicros(dtUs);
     game.update(in, dt);
 
+    if (game.finishedScroll()) {
+        appState_ = AppState::LevelSelect;
+        game.reset();
+
+        rl.clear();
+        buildLevelSelect(rl);
+        return;
+    }
+
+    if (in.back) {
+        appState_ = AppState::LevelSelect;
+        game.reset();
+
+        rl.clear();
+        buildLevelSelect(rl);
+        return;
+    }
+
     Camera cam = renderer.camera();
 
-    // I follow the ship vertically by shifting both pos.y and target.y to keep pitch stable.
+    // Follow the ship vertically while keeping pitch stable.
     const fx follow = fx::fromRatio(3, 20); // 0.15
     const fx yOff = game.ship().y * follow;
 
@@ -86,6 +168,7 @@ void App::tick(const InputState& in, uint32_t dtUs) {
 
     rl.clear();
     renderer.buildScene(rl, game, game.scrollX());
+    renderer.buildOverlay(rl, game);
 }
 
 } // namespace gv

@@ -2,7 +2,7 @@
 #include "game/Config.hpp"
 #include "game/Playfield.hpp"
 #include "game/LevelMath.hpp"
-#include <cstring>
+#include <string>
 
 namespace {
 
@@ -49,6 +49,7 @@ void Game::reset() {
     xScroll  = fx::zero();
     finished_ = false;
 
+    hud_.clear();
     unloadLevel();
 }
 
@@ -89,6 +90,9 @@ bool Game::loadLevel(const char* path) {
     // Start the scroll so the startX column is under the ship.
     xScroll = fx::fromInt(startX * kCellSize);
 
+    hud_.setEvent((std::string("File loaded: ") + path).c_str());
+    hud_.setLevelLabel(path);
+
     return true;
 }
 
@@ -113,6 +117,8 @@ bool Game::readLevelColumn(uint16_t i, Column56& out) const {
 }
 
 void Game::update(const InputState& in, fx dt) {
+    hud_.update(dt);
+
     const fx halfH = playHalfH();
 
     // ---- waiting ----

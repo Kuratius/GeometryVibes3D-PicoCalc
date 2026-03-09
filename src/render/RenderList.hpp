@@ -1,6 +1,9 @@
 #pragma once
+
+#include "Text.hpp"
+#include "core/StaticVector.hpp"
+#include <cstddef>
 #include <cstdint>
-#include <vector>
 
 namespace gv {
 
@@ -9,8 +12,6 @@ struct Line2D {
     uint16_t color565;
 };
 
-// A sprite "definition" references a sub-rect within a texture.
-// These can be stored in ROM and referenced by ID from the per-frame list.
 struct SpriteDef {
     uint8_t  texId = 0;
     uint16_t srcX = 0;
@@ -19,26 +20,43 @@ struct SpriteDef {
     uint16_t h = 0;
 };
 
-// A sprite instance is what goes into the per-frame render list.
 struct SpriteInst {
-    uint16_t spriteId = 0;  // index into spriteDefs
-    int16_t  x = 0;         // screen-space destination
-    int16_t  y = 0;         // screen-space destination
+    uint16_t spriteId = 0;
+    int16_t  x = 0;
+    int16_t  y = 0;
 };
 
-class RenderList {
-public:
-    void clear() { lines_.clear(); }
+struct RenderList {
+    static constexpr std::size_t LINE_CAP   = 2048;
+    static constexpr std::size_t SPRITE_CAP = 128;
+    static constexpr std::size_t TEXT_CAP   = 32;
 
-    void addLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t c565) {
-        lines_.push_back(Line2D{ x0, y0, x1, y1, c565 });
+    void clear() {
+        lines_.clear();
+        sprites_.clear();
+        texts_.clear();
     }
 
-    const std::vector<Line2D>& lines() const { return lines_; }
+    bool addLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color565) {
+        return lines_.push_back(Line2D{ x0, y0, x1, y1, color565 });
+    }
+
+    bool addSprite(uint16_t spriteId, int16_t x, int16_t y) {
+        return sprites_.push_back(SpriteInst{ spriteId, x, y });
+    }
+
+    bool addText(const CachedText* text, int16_t x, int16_t y, uint16_t color565) {
+        return text && texts_.push_back(TextInst{ text, x, y, color565 });
+    }
+
+    const gv::StaticVector<Line2D, LINE_CAP>& lines() const { return lines_; }
+    const gv::StaticVector<SpriteInst, SPRITE_CAP>& sprites() const { return sprites_; }
+    const gv::StaticVector<TextInst, TEXT_CAP>& texts() const { return texts_; }
 
 private:
-    std::vector<Line2D> lines_;
-    std::vector<SpriteInst> sprites_;
+    gv::StaticVector<Line2D, LINE_CAP> lines_{};
+    gv::StaticVector<SpriteInst, SPRITE_CAP> sprites_{};
+    gv::StaticVector<TextInst, TEXT_CAP> texts_{};
 };
 
 } // namespace gv

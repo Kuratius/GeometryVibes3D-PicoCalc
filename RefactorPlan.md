@@ -1,5 +1,3 @@
-Alright. Here’s a concrete, file-by-file refactor plan to get Option C (RenderList + paletted sprites + string prims) in cleanly, while keeping your current slab/DMA pipeline intact.
-
 ## Phase 0: Guardrails
 
 - No gameplay logic changes yet. Just reroute rendering plumbing.

@@ -5,6 +5,7 @@ namespace gv {
 
 namespace {
 
+static constexpr const char* kControlsHintStart = "START[SPACE]";
 static constexpr const char* kEventPrefix = "File loaded: ";
 static constexpr const char* kLevelPrefix = "LEVEL ";
 
@@ -65,7 +66,7 @@ static std::size_t appendUInt(char* dst, std::size_t out, std::size_t cap, unsig
 } // namespace
 
 void Hud::clear() {
-    controlsHint_.clear();
+    controlsHint_.setText(kControlsHintStart);
     levelLabel_.clear();
     progress_.clear();
     eventText_.clear();
@@ -84,7 +85,13 @@ void Hud::update(fx dt) {
     }
 }
 
-void Hud::setEvent(const char* path) {
+void Hud::setControlsHint(const char *s)
+{
+    controlsHint_.setText(s);
+}
+
+void Hud::setEvent(const char *path)
+{
     const char* base = baseNameOf(path);
 
     char buf[Text::CHAR_CAP + 1]{};
@@ -115,6 +122,22 @@ void Hud::setLevelLabel(const char* path) {
 
     buf[out] = '\0';
     levelLabel_.setText(buf);
+}
+
+void Hud::setProgressPercent(int percent) {
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+
+    char buf[Text::CHAR_CAP + 1]{};
+    std::size_t out = 0;
+
+    out = appendUInt(buf, out, Text::CHAR_CAP, static_cast<unsigned>(percent));
+    if (out < Text::CHAR_CAP) {
+        buf[out++] = '%';
+    }
+    buf[out] = '\0';
+
+    progress_.setText(buf);
 }
 
 uint16_t Hud::eventColor() const {

@@ -36,7 +36,7 @@ private:
 
 private:
     static constexpr LevelEntry kLevels[] = {
-        { "Level 1", "levels/L01.BIN" },
+        { "Level 1 \x7F", "levels/L01.BIN" },
         { "Level 2", "levels/L02.BIN" },
     };
     static constexpr std::size_t kLevelCount = sizeof(kLevels) / sizeof(kLevels[0]);

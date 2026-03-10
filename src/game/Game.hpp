@@ -49,6 +49,8 @@ public:
     bool collided() const { return hit; }
     void clearCollision() { hit = false; }
 
+    int progressPercent() const;
+
     Hud& hud() { return hud_; }
     const Hud& hud() const { return hud_; }
 

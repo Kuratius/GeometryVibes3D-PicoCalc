@@ -11,8 +11,10 @@ public:
     void clear();
     void update(fx dt);
 
+    void setControlsHint(const char* s);
     void setEvent(const char* path);
     void setLevelLabel(const char* path);
+    void setProgressPercent(int percent);
 
     const Text& controlsHint() const { return controlsHint_; }
     const Text& levelLabel()   const { return levelLabel_; }

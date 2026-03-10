@@ -2,6 +2,7 @@
 
 #include "../IDisplay.hpp"
 #include "render/Text.hpp"
+#include "render/RenderList.hpp"
 #include <cstdint>
 #include <cstddef>
 
@@ -21,7 +22,7 @@ public:
 
     static constexpr int W = 320;
     static constexpr int H = 320;
-    static constexpr int SLAB_ROWS = 8;
+    static constexpr int SLAB_ROWS = 32;
 
 private:
     static constexpr unsigned SPI_BAUD_HZ = 62'500'000;
@@ -34,10 +35,12 @@ private:
 
     static constexpr int NUM_SLABS = (H + SLAB_ROWS - 1) / SLAB_ROWS;
 
-    static constexpr int MAX_LINES          = 2048;
-    static constexpr int MAX_LINE_BINNED    = 8192;
-    static constexpr int MAX_TEXTS          = 32;
-    static constexpr int MAX_TEXT_BINNED    = 256;
+    static constexpr int MAX_LINES           = 2048;
+    static constexpr int MAX_LINE_BINNED     = 8192;
+    static constexpr int MAX_FILLRECTS       = 128;
+    static constexpr int MAX_FILLRECT_BINNED = 512;
+    static constexpr int MAX_TEXTS           = 32;
+    static constexpr int MAX_TEXT_BINNED     = 256;
 
     struct Line {
         int16_t x0, y0, x1, y1;
@@ -53,6 +56,15 @@ private:
         uint16_t lineSlabCursor[NUM_SLABS]{};
         uint16_t lineSlabIndices[MAX_LINE_BINNED]{};
         int lineBinnedTotal = 0;
+
+        int fillRectCount = 0;
+        FillRectInst fillRects[MAX_FILLRECTS];
+
+        uint16_t fillRectSlabCount[NUM_SLABS]{};
+        uint16_t fillRectSlabOffset[NUM_SLABS + 1]{};
+        uint16_t fillRectSlabCursor[NUM_SLABS]{};
+        uint16_t fillRectSlabIndices[MAX_FILLRECT_BINNED]{};
+        int fillRectBinnedTotal = 0;
 
         int textCount = 0;
         TextInst texts[MAX_TEXTS];
@@ -88,6 +100,7 @@ private:
                                int xmin, int ymin, int xmax, int ymax);
 
     static void binFrameLines(Frame& f);
+    static void binFrameFillRects(Frame& f);
     static void binFrameTexts(Frame& f);
 
     static void core1_entry();
@@ -99,6 +112,7 @@ private:
     void drawLineXMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
     void drawLineYMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
 
+    void drawFillRectIntoSlab(uint16_t* slab, int slabY0, int slabY1, const FillRectInst& inst);
     void drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, const TextInst& inst);
 };
 

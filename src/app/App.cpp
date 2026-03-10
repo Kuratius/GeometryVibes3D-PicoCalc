@@ -3,6 +3,8 @@
 
 namespace gv {
 
+inline constexpr char kStarGlyph = char(127);
+
 int App::run(IPlatform& platform) {
     static constexpr uint32_t kFrameUs = 33333; // ~30 FPS
 
@@ -74,6 +76,7 @@ void App::init(IPlatform& platform) {
     cam.up     = Vec3fx{ fx::fromInt(0),   fx::fromInt(1),  fx::fromInt(0) };
 
     renderer.setCamera(cam);
+    renderer.resetEffects();
 
     appState_ = AppState::LevelSelect;
     selectedLevel_ = 0;
@@ -85,6 +88,8 @@ bool App::loadSelectedLevel() {
 
     game.reset();
     game.setFileSystem(&plat->fs());
+
+    renderer.resetEffects();
 
     const LevelEntry& e = kLevels[selectedLevel_];
     if (!game.loadLevel(e.path)) {
@@ -128,12 +133,33 @@ void App::tick(const InputState& in, uint32_t dtUs) {
         return;
     }
 
+    const RunState prevState = game.state();
+
     const fx dt = fx::fromMicros(dtUs);
     game.update(in, dt);
+
+    if (prevState != RunState::Dead && game.state() == RunState::Dead) {
+        const uint64_t t = plat->nowUs();
+        const uint32_t seed = uint32_t(t) ^ uint32_t(t >> 32);
+        renderer.startShipExplosion(game, seed);
+    }
+
+    renderer.update(dt);
+
+    if (game.state() == RunState::Dead && !renderer.explosionActive()) {
+        appState_ = AppState::LevelSelect;
+        game.reset();
+        renderer.resetEffects();
+        
+        rl.clear();
+        buildLevelSelect(rl);
+        return;
+    }
 
     if (game.finishedScroll()) {
         appState_ = AppState::LevelSelect;
         game.reset();
+        renderer.resetEffects();
 
         rl.clear();
         buildLevelSelect(rl);
@@ -143,6 +169,7 @@ void App::tick(const InputState& in, uint32_t dtUs) {
     if (in.back) {
         appState_ = AppState::LevelSelect;
         game.reset();
+        renderer.resetEffects();
 
         rl.clear();
         buildLevelSelect(rl);

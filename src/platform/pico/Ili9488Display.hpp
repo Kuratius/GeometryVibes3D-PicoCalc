@@ -1,5 +1,8 @@
 #pragma once
+
 #include "../IDisplay.hpp"
+#include "render/Text.hpp"
+#include "render/RenderList.hpp"
 #include <cstdint>
 #include <cstddef>
 
@@ -10,17 +13,17 @@ public:
     Ili9488Display();
     ~Ili9488Display();
 
-    int width()  const override { return W; }
+    int width() const override { return W; }
     int height() const override { return H; }
 
     void beginFrame() override;
-    void drawLines(const DrawList& dl) override;
+    void draw(const RenderList& rl) override;
     void endFrame() override;
 
     static constexpr int W = 320;
     static constexpr int H = 320;
-    static constexpr int SLAB_ROWS = 8;
-    
+    static constexpr int SLAB_ROWS = 32;
+
 private:
     static constexpr unsigned SPI_BAUD_HZ = 62'500'000;
 
@@ -32,10 +35,12 @@ private:
 
     static constexpr int NUM_SLABS = (H + SLAB_ROWS - 1) / SLAB_ROWS;
 
-    static constexpr int MAX_LINES          = 2048;
-    static constexpr int MAX_BINNED_ENTRIES = 8192;
-
-    bool inited = false;
+    static constexpr int MAX_LINES           = 2048;
+    static constexpr int MAX_LINE_BINNED     = 8192;
+    static constexpr int MAX_FILLRECTS       = 128;
+    static constexpr int MAX_FILLRECT_BINNED = 512;
+    static constexpr int MAX_TEXTS           = 32;
+    static constexpr int MAX_TEXT_BINNED     = 256;
 
     struct Line {
         int16_t x0, y0, x1, y1;
@@ -46,24 +51,42 @@ private:
         int lineCount = 0;
         Line lines[MAX_LINES];
 
-        uint16_t slabCount[NUM_SLABS]{};
-        uint16_t slabOffset[NUM_SLABS + 1]{};
-        uint16_t slabCursor[NUM_SLABS]{};
-        uint16_t slabIndices[MAX_BINNED_ENTRIES]{};
-        int binnedTotal = 0;
+        uint16_t lineSlabCount[NUM_SLABS]{};
+        uint16_t lineSlabOffset[NUM_SLABS + 1]{};
+        uint16_t lineSlabCursor[NUM_SLABS]{};
+        uint16_t lineSlabIndices[MAX_LINE_BINNED]{};
+        int lineBinnedTotal = 0;
+
+        int fillRectCount = 0;
+        FillRectInst fillRects[MAX_FILLRECTS];
+
+        uint16_t fillRectSlabCount[NUM_SLABS]{};
+        uint16_t fillRectSlabOffset[NUM_SLABS + 1]{};
+        uint16_t fillRectSlabCursor[NUM_SLABS]{};
+        uint16_t fillRectSlabIndices[MAX_FILLRECT_BINNED]{};
+        int fillRectBinnedTotal = 0;
+
+        int textCount = 0;
+        TextInst texts[MAX_TEXTS];
+
+        uint16_t textSlabCount[NUM_SLABS]{};
+        uint16_t textSlabOffset[NUM_SLABS + 1]{};
+        uint16_t textSlabCursor[NUM_SLABS]{};
+        uint16_t textSlabIndices[MAX_TEXT_BINNED]{};
+        int textBinnedTotal = 0;
     };
 
-    // Two frames for pipelining
+    bool inited = false;
+
     static Frame s_frame[2];
     static volatile bool s_slotReady[2];
-    static volatile int  s_prod;   // core0 writes this slot
+    static volatile int s_prod;
     static Ili9488Display* s_active;
 
-    // Stats (core0)
     int lastLines = 0;
     int lastBinned = 0;
+    int lastTexts = 0;
 
-private:
     void lcdFillBlack();
     void initIfNeeded();
     void lcdReset();
@@ -73,18 +96,24 @@ private:
     void writeData(const uint8_t* data, size_t n);
     void writeDataByte(uint8_t b);
 
-    // Core0: line clipping + binning into the producer frame
     static bool clipLineToRect(int& x0, int& y0, int& x1, int& y1,
                                int xmin, int ymin, int xmax, int ymax);
-    static void binFrameLines(Frame& f);
 
-    // Core1: render+flush consumer slot
+    static void binFrameLines(Frame& f);
+    static void binFrameFillRects(Frame& f);
+    static void binFrameTexts(Frame& f);
+
     static void core1_entry();
     void renderAndFlushFrame(const Frame& f);
 
-    // Slab raster helpers (core1)
-    static inline void plotSlab(uint16_t* slab, int x, int yLocal, uint16_t c_swapped);
-    static void drawLineIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
+    static inline void plotSlab(uint16_t* slab, int x, int yLocal, uint16_t c565);
+
+    void drawLineIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
+    void drawLineXMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
+    void drawLineYMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln);
+
+    void drawFillRectIntoSlab(uint16_t* slab, int slabY0, int slabY1, const FillRectInst& inst);
+    void drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, const TextInst& inst);
 };
 
 } // namespace gv

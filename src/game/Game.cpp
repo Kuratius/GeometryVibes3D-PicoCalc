@@ -1,10 +1,13 @@
 #include "Game.hpp"
-#include "app/Config.hpp"
+#include "game/Config.hpp"
 #include "game/Playfield.hpp"
 #include "game/LevelMath.hpp"
-#include <cstring>
+#include <string>
 
 namespace {
+
+static constexpr const char* kControlsHintStart = "START[SPACE]";
+static constexpr const char* kControlsHintPause = "PAUSE[ESC]";
 
 static inline int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
@@ -14,6 +17,26 @@ static inline gv::fx shipRadius() { return gv::fx::fromInt(gv::kCellSize / 4); }
 } // anon
 
 namespace gv {
+
+int Game::progressPercent() const {
+    if (!hasLevel()) return 0;
+
+    const int width = int(levelHdr.width);
+    if (width <= 0) return 0;
+
+    int portalX = (width - 1) + int(levelHdr.portalDx);
+    if (portalX < 0) portalX = 0;
+    if (portalX >= width) portalX = width - 1;
+
+    const int denom = portalX * kCellSize;
+    if (denom <= 0) return 100;
+
+    int numer = xScroll.toInt();
+    if (numer < 0) numer = 0;
+    if (numer > denom) numer = denom;
+
+    return (numer * 100) / denom;
+}
 
 bool Game::checkPortalReached(fx shipY) const {
     if (!hasLevel()) return false;
@@ -49,6 +72,8 @@ void Game::reset() {
     xScroll  = fx::zero();
     finished_ = false;
 
+    hud_.clear();
+    hud_.setControlsHint(kControlsHintStart);
     unloadLevel();
 }
 
@@ -89,6 +114,11 @@ bool Game::loadLevel(const char* path) {
     // Start the scroll so the startX column is under the ship.
     xScroll = fx::fromInt(startX * kCellSize);
 
+    hud_.setEvent((std::string("File loaded: ") + path).c_str());
+    hud_.setLevelLabel(path);
+    hud_.setProgressPercent(0);
+    hud_.setControlsHint(kControlsHintStart);
+
     return true;
 }
 
@@ -113,6 +143,9 @@ bool Game::readLevelColumn(uint16_t i, Column56& out) const {
 }
 
 void Game::update(const InputState& in, fx dt) {
+    hud_.update(dt);
+    hud_.setProgressPercent(progressPercent());
+
     const fx halfH = playHalfH();
 
     // ---- waiting ----
@@ -123,6 +156,7 @@ void Game::update(const InputState& in, fx dt) {
 
         if (in.thrustPressed) {
             runState = RunState::Running;
+            hud_.setControlsHint(kControlsHintPause);
         }
         return;
     }
@@ -164,7 +198,7 @@ void Game::update(const InputState& in, fx dt) {
         hit = checkCollisionAt(shipState.y);
         if (hit) {
             runState = RunState::Dead;
-            finished_ = true;
+            finished_ = false;
             return;
         }
     }

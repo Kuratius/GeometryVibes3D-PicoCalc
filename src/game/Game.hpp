@@ -4,6 +4,7 @@
 #include "game/Level.hpp"
 #include "game/Input.hpp"
 #include "platform/IFileSystem.hpp"
+#include "Hud.hpp"
 
 namespace gv {
 
@@ -48,6 +49,11 @@ public:
     bool collided() const { return hit; }
     void clearCollision() { hit = false; }
 
+    int progressPercent() const;
+
+    Hud& hud() { return hud_; }
+    const Hud& hud() const { return hud_; }
+
 private:
     bool checkPortalReached(fx shipY) const;
     bool checkCollisionAt(fx shipY) const;
@@ -63,6 +69,7 @@ private:
     IFileSystem* fs_ = nullptr;
     IFile* file_ = nullptr;      // IFileSystem owns the backing file; keep a pointer while open.
     LevelHeaderV1 levelHdr{};
+    Hud hud_{};
 };
 
 } // namespace gv

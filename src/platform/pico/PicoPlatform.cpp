@@ -16,6 +16,8 @@ public:
         kb_.init();
     }
 
+    uint64_t nowUs() const override { return time_us_64(); }
+
     uint32_t dtUs() override {
         uint64_t now = time_us_64();
         uint64_t us = now - last;

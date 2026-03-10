@@ -10,6 +10,7 @@ class IPlatform {
 public:
     virtual ~IPlatform() = default;
     virtual void init() = 0;
+    virtual uint64_t nowUs() const = 0;
     virtual uint32_t dtUs() = 0;
     virtual IDisplay& display() = 0;
     virtual IFileSystem& fs() = 0;

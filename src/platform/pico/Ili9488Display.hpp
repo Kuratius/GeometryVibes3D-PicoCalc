@@ -22,7 +22,7 @@ public:
 
     static constexpr int W = 320;
     static constexpr int H = 320;
-    static constexpr int SLAB_ROWS = 32;
+    static constexpr int SLAB_ROWS = 16;
 
 private:
     static constexpr unsigned SPI_BAUD_HZ = 62'500'000;

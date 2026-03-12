@@ -5,7 +5,9 @@ namespace gv {
 
 namespace {
 
-static constexpr const char* kControlsHintStart = "START[SPACE]";
+static constexpr const char* kControlsHintStart    = "START[SPACE]";
+static constexpr const char* kControlsHintPause    = "PAUSE[ESC]";
+static constexpr const char* kControlsHintContinue = "CONTINUE[SPACE]";
 static constexpr const char* kEventPrefix = "File loaded: ";
 static constexpr const char* kLevelPrefix = "LEVEL ";
 
@@ -90,8 +92,7 @@ void Hud::setControlsHint(const char *s)
     controlsHint_.setText(s);
 }
 
-void Hud::setEvent(const char *path)
-{
+void Hud::setEvent(const char* path) {
     const char* base = baseNameOf(path);
 
     char buf[Text::CHAR_CAP + 1]{};
@@ -101,9 +102,24 @@ void Hud::setEvent(const char *path)
     out = appendChars(buf, out, Text::CHAR_CAP, base);
     buf[out] = '\0';
 
-    eventText_.setText(buf);
+    setEventMessage(buf, true);
+}
+
+void Hud::setEventMessage(const char* s, bool fade) {
+    eventText_.setText(s ? s : "");
     eventAge_ = fx::zero();
     eventVisible_ = !eventText_.empty();
+
+    if (!fade) {
+        // Keep it visible indefinitely until replaced/cleared.
+        eventAge_ = fx::zero();
+    }
+}
+
+void Hud::clearEvent() {
+    eventText_.clear();
+    eventAge_ = fx::zero();
+    eventVisible_ = false;
 }
 
 void Hud::setLevelLabel(const char* path) {

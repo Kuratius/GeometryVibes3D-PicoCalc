@@ -82,7 +82,9 @@ private:
     void addRightTriPrism(RenderList& rl, const Vec3fx& pos, uint16_t color,
                           ModId mod, const Vec3fx& origin) const;
 
-    void addText(RenderList& rl, const Text& text, int16_t x, int16_t y, uint16_t color) const;
+    void addText(RenderList& rl, const Text& text, int16_t x, int16_t y,
+             uint16_t color, uint8_t alpha = 255, bool inverted = false) const;
+             
     void drawExplosion(RenderList& rl, uint16_t color) const;
 
 private:

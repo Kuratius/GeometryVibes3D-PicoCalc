@@ -22,8 +22,6 @@ int App::run(IPlatform& platform) {
             continue;
         }
 
-        // Sample input only when a simulation step will run so pressed-edge events
-        // stay aligned with the frame/update cadence.
         plat->input().update();
         const IInput& kb = plat->input();
 
@@ -44,9 +42,13 @@ int App::run(IPlatform& platform) {
 
         tick(in, kFrameUs);
 
-        plat->display().beginFrame();
-        plat->display().draw(renderList());
-        plat->display().endFrame();
+        if (appState_ == AppState::TitleScreen) {
+            titleScreen_.draw(plat->display());
+        } else {
+            plat->display().beginFrame();
+            plat->display().draw(renderList());
+            plat->display().endFrame();
+        }
     }
 
     return 0;
@@ -78,7 +80,12 @@ void App::init(IPlatform& platform) {
     renderer.setCamera(cam);
     renderer.resetEffects();
 
-    appState_ = AppState::LevelSelect;
+    if (titleScreen_.load(platform.fs(), "assets/title.rgb565")) {
+        appState_ = AppState::TitleScreen;
+    } else {
+        appState_ = AppState::LevelSelect;
+    }
+
     selectedLevel_ = 0;
 }
 
@@ -88,7 +95,6 @@ bool App::loadSelectedLevel() {
 
     game.reset();
     game.setFileSystem(&plat->fs());
-
     renderer.resetEffects();
 
     const LevelEntry& e = kLevels[selectedLevel_];
@@ -112,11 +118,23 @@ void App::buildLevelSelect(RenderList& rl) const {
 
     for (std::size_t i = 0; i < kLevelCount; ++i) {
         const bool selected = (i == selectedLevel_);
-        rl.addText(&levelTexts_[i], (int16_t)itemX, (int16_t)(startY + int(i) * lineStep), kWhite, selected);
+        rl.addText(&levelTexts_[i], (int16_t)itemX, (int16_t)(startY + int(i) * lineStep), kWhite, 255, selected);
     }
 }
 
 void App::tick(const InputState& in, uint32_t dtUs) {
+    if (appState_ == AppState::TitleScreen) {
+        titleScreen_.update(in);
+        if (titleScreen_.accepted()) {
+            titleScreen_.unload();
+            appState_ = AppState::LevelSelect;
+
+            rl.clear();
+            buildLevelSelect(rl);
+        }
+        return;
+    }
+
     if (appState_ == AppState::LevelSelect) {
         if (in.upPressed && selectedLevel_ > 0) {
             --selectedLevel_;
@@ -130,6 +148,26 @@ void App::tick(const InputState& in, uint32_t dtUs) {
 
         rl.clear();
         buildLevelSelect(rl);
+        return;
+    }
+
+    if (in.pausePressed && !game.paused()) {
+        game.pause();
+
+        rl.clear();
+        renderer.buildScene(rl, game, game.scrollX());
+        renderer.buildOverlay(rl, game);
+        return;
+    }
+
+    if (game.paused()) {
+        if (in.thrustPressed) {
+            game.resume();
+        }
+
+        rl.clear();
+        renderer.buildScene(rl, game, game.scrollX());
+        renderer.buildOverlay(rl, game);
         return;
     }
 
@@ -150,7 +188,7 @@ void App::tick(const InputState& in, uint32_t dtUs) {
         appState_ = AppState::LevelSelect;
         game.reset();
         renderer.resetEffects();
-        
+
         rl.clear();
         buildLevelSelect(rl);
         return;
@@ -178,7 +216,6 @@ void App::tick(const InputState& in, uint32_t dtUs) {
 
     Camera cam = renderer.camera();
 
-    // Follow the ship vertically while keeping pitch stable.
     const fx follow = fx::fromRatio(3, 20); // 0.15
     const fx yOff = game.ship().y * follow;
 

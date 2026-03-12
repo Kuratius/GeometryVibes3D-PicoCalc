@@ -6,8 +6,9 @@
 
 namespace {
 
-static constexpr const char* kControlsHintStart = "START[SPACE]";
-static constexpr const char* kControlsHintPause = "PAUSE[ESC]";
+static constexpr const char* kControlsHintStart    = "START[SPACE]";
+static constexpr const char* kControlsHintPause    = "PAUSE[ESC]";
+static constexpr const char* kControlsHintContinue = "CONTINUE[SPACE]";
 
 static inline int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
@@ -66,6 +67,7 @@ void Game::reset() {
     shipState.vy = fx::fromInt(0);
 
     runState = RunState::WaitingToStart;
+    resumeState = RunState::WaitingToStart;
     flyOutX = fx::zero();
     hit = false;
 
@@ -101,6 +103,7 @@ bool Game::loadLevel(const char* path) {
     shipState.vy = fx::zero();
     flyOutX = fx::zero();
     runState = RunState::WaitingToStart;
+    resumeState = RunState::WaitingToStart;
 
     // ---- spawn from header (cell coords) ----
     const int h = int(levelHdr.height);
@@ -145,6 +148,11 @@ bool Game::readLevelColumn(uint16_t i, Column56& out) const {
 void Game::update(const InputState& in, fx dt) {
     hud_.update(dt);
     hud_.setProgressPercent(progressPercent());
+
+    if (runState == RunState::Paused) {
+        shipState.vy = fx::zero();
+        return;
+    }
 
     const fx halfH = playHalfH();
 
@@ -202,6 +210,26 @@ void Game::update(const InputState& in, fx dt) {
             return;
         }
     }
+}
+
+void Game::pause() {
+    if (runState == RunState::Paused) return;
+    if (runState == RunState::WaitingToStart) return;
+
+    resumeState = runState;
+    runState = RunState::Paused;
+    shipState.vy = fx::zero();
+
+    hud_.setControlsHint(kControlsHintContinue);
+    hud_.setEventMessage("Game Paused!", false);
+}
+
+void Game::resume() {
+    if (runState != RunState::Paused) return;
+
+    runState = resumeState;
+    hud_.setControlsHint(kControlsHintPause);
+    hud_.clearEvent();
 }
 
 bool Game::checkCollisionAt(fx shipY) const {

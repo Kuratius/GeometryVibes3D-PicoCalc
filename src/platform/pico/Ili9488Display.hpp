@@ -18,8 +18,9 @@ public:
 
     void beginFrame() override;
     void draw(const RenderList& rl) override;
+    void drawBitmap565(int x, int y, int w, int h, const uint16_t* pixels) override;
     void endFrame() override;
-
+    
     static constexpr int W = 320;
     static constexpr int H = 320;
     static constexpr int SLAB_ROWS = 16;

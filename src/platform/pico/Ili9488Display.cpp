@@ -76,6 +76,18 @@ static inline int ceilFxToInt(gv::fx a) {
     return (raw >= 0) ? ((raw >> gv::fx::SHIFT) + 1) : (raw >> gv::fx::SHIFT);
 }
 
+static inline uint16_t scale565(uint16_t c, uint8_t a) {
+    const uint32_t r = (c >> 11) & 0x1F;
+    const uint32_t g = (c >> 5)  & 0x3F;
+    const uint32_t b = c & 0x1F;
+
+    const uint32_t rs = (r * a + 127) / 255;
+    const uint32_t gs = (g * a + 127) / 255;
+    const uint32_t bs = (b * a + 127) / 255;
+
+    return uint16_t((rs << 11) | (gs << 5) | bs);
+}
+
 void Ili9488Display::beginFrame() {
     initIfNeeded();
 
@@ -130,6 +142,55 @@ void Ili9488Display::draw(const RenderList& rl) {
     lastLines  = f.lineCount;
     lastBinned = f.lineBinnedTotal;
     lastTexts  = f.textCount;
+}
+
+void Ili9488Display::drawBitmap565(int x, int y, int w, int h, const uint16_t* pixels) {
+    initIfNeeded();
+
+    if (!pixels || w <= 0 || h <= 0) return;
+
+    const int dstX0 = x;
+    const int dstY0 = y;
+    const int dstX1 = x + w - 1;
+    const int dstY1 = y + h - 1;
+
+    if (dstX1 < 0 || dstX0 >= W || dstY1 < 0 || dstY0 >= H) {
+        return;
+    }
+
+    const int clipX0 = (dstX0 < 0) ? 0 : dstX0;
+    const int clipY0 = (dstY0 < 0) ? 0 : dstY0;
+    const int clipX1 = (dstX1 >= W) ? (W - 1) : dstX1;
+    const int clipY1 = (dstY1 >= H) ? (H - 1) : dstY1;
+
+    const int clipW = clipX1 - clipX0 + 1;
+    const int clipH = clipY1 - clipY0 + 1;
+
+    const int srcX0 = clipX0 - dstX0;
+    const int srcY0 = clipY0 - dstY0;
+
+    setAddrWindow(clipX0, clipY0, clipX1, clipY1);
+
+    gpio_put(PIN_DC, 1);
+    gpio_put(PIN_CS, 0);
+    spi_set_format(spi1, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+    // Fast path: no horizontal cropping, source rows contiguous.
+    if (srcX0 == 0 && clipW == w) {
+        const uint16_t* src = pixels + srcY0 * w;
+        start_dma_slab(src, clipW * clipH);
+        wait_for_spi_dma_idle();
+    } else {
+        // Generic clipped path: send one row at a time.
+        for (int row = 0; row < clipH; ++row) {
+            const uint16_t* src = pixels + (srcY0 + row) * w + srcX0;
+            start_dma_slab(src, clipW);
+            wait_for_spi_dma_idle();
+        }
+    }
+
+    spi_set_format(spi1, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    gpio_put(PIN_CS, 1);
 }
 
 void Ili9488Display::endFrame() {
@@ -688,14 +749,14 @@ void Ili9488Display::drawFillRectIntoSlab(uint16_t* slab, int slabY0, int slabY1
     }
 }
 
-void Ili9488Display::drawTextIntoSlab(uint16_t *slab, int slabY0, int slabY1, const TextInst &inst)
-{
+void Ili9488Display::drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, const TextInst& inst) {
     const Text* text = inst.text;
     if (!text) return;
 
     const int textW = text->width();
     const int textH = text->height();
     if (textW <= 0 || textH <= 0) return;
+    if (inst.alpha == 0) return;
 
     const int dstX0 = inst.x;
     const int dstY0 = inst.y;
@@ -712,8 +773,10 @@ void Ili9488Display::drawTextIntoSlab(uint16_t *slab, int slabY0, int slabY1, co
     const int yStart = (dstY0 < slabY0) ? slabY0 : dstY0;
     const int yEnd   = (dstY1 > slabY1) ? slabY1 : dstY1;
 
-    const uint16_t fgColor = inst.inverted ? 0u : inst.color565;
-    const uint16_t bgColor = inst.inverted ? inst.color565 : 0u;
+    const uint16_t litColor = scale565(inst.color565, inst.alpha);
+    const uint16_t fgColor = inst.inverted ? 0u : litColor;
+    const uint16_t bgColor = inst.inverted ? litColor : 0u;
+
     for (int y = yStart; y <= yEnd; ++y) {
         const int ty = y - dstY0;
         const int yLocal = y - slabY0;

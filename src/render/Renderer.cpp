@@ -397,9 +397,9 @@ void Renderer::addRightTriPrism(RenderList& rl, const Vec3fx& pos, uint16_t colo
     }
 }
 
-void Renderer::addText(RenderList& rl, const Text& text, int16_t x, int16_t y, uint16_t color) const {
+void Renderer::addText(RenderList& rl, const Text& text, int16_t x, int16_t y, uint16_t color, uint8_t alpha, bool inverted) const {
     if (!text.empty()) {
-        rl.addText(&text, x, y, color);
+        rl.addText(&text, x, y, color, alpha, inverted);
     }
 }
 

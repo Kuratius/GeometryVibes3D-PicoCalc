@@ -13,6 +13,8 @@ public:
 
     void setControlsHint(const char* s);
     void setEvent(const char* path);
+    void setEventMessage(const char* s, bool fade = true);
+    void clearEvent();
     void setLevelLabel(const char* path);
     void setProgressPercent(int percent);
 

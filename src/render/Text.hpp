@@ -58,6 +58,7 @@ struct TextInst {
     int16_t x = 0;
     int16_t y = 0;
     uint16_t color565 = 0;
+    uint8_t alpha = 255;
     bool inverted = false;
 };
 

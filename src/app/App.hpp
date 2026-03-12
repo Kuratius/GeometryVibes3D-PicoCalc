@@ -5,17 +5,18 @@
 #include "render/Renderer.hpp"
 #include "render/RenderList.hpp"
 #include "render/Text.hpp"
+#include "TitleScreen.hpp"
 #include <cstddef>
 
 namespace gv {
 
 class App {
 public:
-    // Owns init + main loop
     int run(IPlatform& platform);
 
 private:
     enum class AppState : uint8_t {
+        TitleScreen,
         LevelSelect,
         Playing
     };
@@ -49,8 +50,9 @@ private:
     Game game;
     Renderer renderer;
     RenderList rl;
+    TitleScreen titleScreen_;
 
-    AppState appState_ = AppState::LevelSelect;
+    AppState appState_ = AppState::TitleScreen;
     std::size_t selectedLevel_ = 0;
 
     Text menuTitle_{ "SELECT LEVEL" };

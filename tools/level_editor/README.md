@@ -3,7 +3,7 @@
 A simple Tkinter-based editor for GV3D obstacle-only levels.
 
 Features:
-- Place player start and grid-aligned obstacles (base shape + optional modifier)
+- Place grid-aligned obstacles (base shape + optional modifier)
 - Horizontal scroll only; vertically centered grid
 - Copy/paste rectangle selection (does not copy start)
 - Undo (Ctrl+Z)

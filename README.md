@@ -45,12 +45,11 @@ Current state: playable wireframe “fake 3D” implementation with a level-sele
 
 - **Level editor**: `tools/level_editor/level_editor.py`
   - tkinter-based 9×N obstacle editor
-  - place ship start position
   - paint obstacles and modifiers
   - locked auto-generated endcap + portal preview
   - rectangle select, copy, cut, paste, and undo
   - import/export JSON
-  - export packed **GVL1** binary files for the game
+  - export packed **GVL2** binary files for the game
 
 - **RGB565 image converter**: `tools/image_convert/convert_rgb565.py`
   - converts source images into raw RGB565 assets for use in-game

@@ -26,21 +26,19 @@ enum class ModId : uint8_t {
 };
 
 #pragma pack(push, 1)
-struct LevelHeaderV1 {
-    char     magic[4];     // "GVL1"
-    uint8_t  version;      // 1
-    uint16_t width;        // little-endian
-    uint8_t  height;       // 9
-    uint8_t  startX;
-    uint8_t  startY;
-    int8_t   portalDx;     // relative to last column (width-1)
+struct LevelHeader {
+    char     magic[4];     // "GVL2"
+    uint8_t  version;
+    uint16_t width;
+    uint8_t  height;
+    int8_t   portalDx;
     uint8_t  portalY;
-    uint8_t  endcapW;      // 6 (metadata)
-    uint8_t  reserved[3];  // 0
+    uint8_t  endcapW;
+    uint8_t  reserved[5];
 };
 #pragma pack(pop)
 
-static_assert(sizeof(LevelHeaderV1) == 16, "LevelHeaderV1 must be 16 bytes");
+static_assert(sizeof(LevelHeader) == 16, "LevelHeader must be 16 bytes");
 
 // 56-bit column payload stored as 7 bytes LE
 struct Column56 {
@@ -74,9 +72,9 @@ struct Column56 {
     }
 };
 
-inline bool read_header(FILE* f, LevelHeaderV1& out) {
+inline bool read_header(FILE* f, LevelHeader& out) {
     if (!f) return false;
-    if (std::fread(&out, 1, sizeof(LevelHeaderV1), f) != sizeof(LevelHeaderV1)) return false;
+    if (std::fread(&out, 1, sizeof(LevelHeader), f) != sizeof(LevelHeader)) return false;
     if (std::memcmp(out.magic, "GVL1", 4) != 0) return false;
     if (out.version != 1) return false;
     if (out.height != kLevelHeight) return false;
@@ -92,7 +90,7 @@ inline bool read_column(FILE* f, uint16_t i, Column56& out) {
 }
 
 // Portal absolute X is (width-1) + portalDx
-inline int portal_abs_x(const LevelHeaderV1& h) {
+inline int portal_abs_x(const LevelHeader& h) {
     return int(h.width) - 1 + int(h.portalDx);
 }
 

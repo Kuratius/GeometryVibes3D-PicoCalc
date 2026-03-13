@@ -76,8 +76,10 @@ void PlayingState::update(App& app, const InputState& in, uint32_t dtUs) {
     sceneBuilder_.updatePortalRays(portalRays_, dt);
 
     if (game.state() == RunState::Dead && !explosion_.active) {
-        returnToLevelSelect(app);
-        return;
+        if (in.thrustPressed) {
+            returnToLevelSelect(app);
+            return;
+        }
     }
 
     if (game.finishedScroll()) {

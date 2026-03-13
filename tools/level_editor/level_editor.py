@@ -5,7 +5,7 @@ import json
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Any, List, Set
+from typing import Dict, Optional, Tuple, Any, List
 
 # -----------------------------
 # Spec constants
@@ -138,7 +138,6 @@ class Obstacle:
 class Level:
     width: int
     height: int = GRID_H
-    start: Tuple[int, int] = (0, 4)
     obstacles: Dict[str, Obstacle] = None
 
     def __post_init__(self) -> None:
@@ -159,23 +158,13 @@ class Level:
     def in_endcap(self, x: int) -> bool:
         return x >= self.endcap_x0()
 
-    def clamp_start(self) -> None:
-        sx, sy = self.start
-        sx = min(max(0, sx), max(0, self.width - 1))
-        sy = min(max(0, sy), self.height - 1)
-        # don't allow start inside locked endcap
-        if self.in_endcap(sx):
-            sx = max(0, self.endcap_x0() - 1)
-        self.start = (sx, sy)
-
     def resize_width(self, new_w: int) -> None:
-        """Allow grow or shrink. Shrink clips obstacles beyond new width and clamps start."""
+        """Allow grow or shrink. Shrink clips obstacles beyond new width."""
         new_w = int(new_w)
         if new_w < 1:
             new_w = 1
         self.width = new_w
 
-        # clip obstacles
         kill: List[str] = []
         for k in self.obstacles.keys():
             xs, ys = k.split(",")
@@ -185,17 +174,11 @@ class Level:
         for k in kill:
             self.obstacles.pop(k, None)
 
-        self.clamp_start()
-
-    def set_start(self, x: int, y: int) -> None:
-        if self.in_bounds(x, y) and not self.in_endcap(x):
-            self.start = (x, y)
-
     def set_obstacle(self, x: int, y: int, obs: Optional[Obstacle]) -> None:
         if not self.in_bounds(x, y):
             return
         if self.in_endcap(x):
-            return  # locked endcap region
+            return
         k = self.key(x, y)
         if obs is None:
             self.obstacles.pop(k, None)
@@ -204,14 +187,13 @@ class Level:
 
     def get_obstacle(self, x: int, y: int) -> Optional[Obstacle]:
         return self.obstacles.get(self.key(x, y))
-    
+
     def effective_obstacle_at(self, x: int, y: int):
         """Return authored obstacle if present; else if in endcap, return endcap obstacle; else None."""
         obs = self.get_obstacle(x, y)
         if obs:
             return obs
 
-        # endcap overlay
         last = self.width - 1
         if x >= self.endcap_x0():
             dx = x - last
@@ -224,7 +206,7 @@ class Level:
         if not self.in_bounds(x, y):
             return
         if self.in_endcap(x):
-            return  # locked
+            return
         self.obstacles.pop(self.key(x, y), None)
 
     def strip_endcap_from_authored(self) -> None:
@@ -237,7 +219,6 @@ class Level:
                 kill.append(k)
         for k in kill:
             self.obstacles.pop(k, None)
-        self.clamp_start()
 
     def apply_endcap_to_export_list(self, out_list: List[Dict[str, Any]]) -> None:
         """Append the fixed endcap obstacles as absolute x,y entries."""
@@ -254,18 +235,16 @@ class Level:
     def portal_abs(self) -> Tuple[int, int]:
         last = self.width - 1
         return (last + int(PORTAL_REL["dx"]), int(PORTAL_REL["y"]))
-    
+
     def write_bin(self, path: str) -> None:
-        # Ensure authored data is clean; export will still include endcap via effective_obstacle_at
         self.strip_endcap_from_authored()
 
-        magic = b"GVL1"
-        version = 1
+        magic = b"GVL2"
+        version = 2
         width = int(self.width)
-        height = int(self.height)  # should be 9
-        sx, sy = self.start
+        height = int(self.height)
 
-        portal_dx = int(PORTAL_REL["dx"]) & 0xFF  # store as int8 in file
+        portal_dx = int(PORTAL_REL["dx"]) & 0xFF
         portal_y = int(PORTAL_REL["y"]) & 0xFF
         endcap_w = int(ENDCAP_W) & 0xFF
 
@@ -274,16 +253,14 @@ class Level:
         header += bytes([version])
         header += width.to_bytes(2, "little", signed=False)
         header += bytes([height & 0xFF])
-        header += bytes([sx & 0xFF, sy & 0xFF])
         header += int.to_bytes((portal_dx if portal_dx < 128 else portal_dx - 256), 1, "little", signed=True)
         header += bytes([portal_y])
         header += bytes([endcap_w])
-        header += b"\x00\x00\x00"  # reserved to 16 bytes
+        header += b"\x00\x00\x00\x00\x00"  # reserved to 16 bytes
 
         with open(path, "wb") as f:
             f.write(header)
 
-            # Columns: width * 7 bytes
             for x in range(width):
                 col = 0
                 for y in range(9):
@@ -294,38 +271,32 @@ class Level:
                     else:
                         shape_id = SHAPE_ID.get(obs.shape, 0) & 0xF
                         mod_id = MOD_ID.get(obs.mod, 0) & 0x3
-                        # modifiers only meaningful for some shapes; enforce like editor
                         if obs.shape not in MOD_SHAPES:
                             mod_id = 0
 
                     cell6 = (shape_id & 0xF) | ((mod_id & 0x3) << 4)
                     col |= (cell6 & 0x3F) << (y * 6)
 
-                # top 2 bits reserved (0)
                 f.write(int(col).to_bytes(7, "little", signed=False))
 
     def to_json_obj(self) -> Dict[str, Any]:
-        # authored obstacles (without endcap)
         authored = []
         for k, obs in self.obstacles.items():
             xs, ys = k.split(",")
             authored.append({"x": int(xs), "y": int(ys), **obs.to_obj()})
         authored.sort(key=lambda o: (o["y"], o["x"], o["shape"]))
 
-        # export list = authored + endcap
         out_obs = list(authored)
         self.apply_endcap_to_export_list(out_obs)
         out_obs.sort(key=lambda o: (o["y"], o["x"], o["shape"]))
 
-        # portal
         px, py = self.portal_abs()
         return {
             "width": self.width,
             "height": self.height,
-            "start": {"x": self.start[0], "y": self.start[1]},
             "obstacles": out_obs,
             "portal": {"dx": int(PORTAL_REL["dx"]), "y": int(PORTAL_REL["y"]), "x": px},
-            "endcap": {"width": ENDCAP_W},  # metadata
+            "endcap": {"width": ENDCAP_W},
         }
 
     @staticmethod
@@ -336,10 +307,6 @@ class Level:
             raise ValueError("Expected height=9.")
         lvl = Level(width=w, height=h)
 
-        s = obj.get("start", {})
-        lvl.start = (int(s.get("x", 0)), int(s.get("y", 4)))
-        lvl.clamp_start()
-
         lvl.obstacles.clear()
         for o in obj.get("obstacles", []):
             x = int(o.get("x", 0))
@@ -347,11 +314,9 @@ class Level:
             if not lvl.in_bounds(x, y):
                 continue
             obs = Obstacle.from_obj(o)
-            # load everything, then we'll strip endcap after
             k = lvl.key(x, y)
             lvl.obstacles[k] = obs
 
-        # IMPORTANT: keep authored data clean by stripping endcap
         lvl.strip_endcap_from_authored()
         return lvl
 
@@ -361,11 +326,8 @@ class Level:
 
 @dataclass
 class UndoAction:
-    # store prior and new states for touched cells + start
     before_cells: Dict[str, Optional[Obstacle]]
     after_cells: Dict[str, Optional[Obstacle]]
-    before_start: Tuple[int, int]
-    after_start: Tuple[int, int]
     before_width: int
     after_width: int
 
@@ -382,7 +344,6 @@ class EditorApp:
 
         # UI state
         self.width_var = tk.IntVar(value=self.level.width)
-        self.mode_var = tk.StringVar(value="paint")  # paint / start
         self.shape_var = tk.StringVar(value=SHAPE_SQUARE)
         self.mod_var = tk.StringVar(value=MOD_NONE)
 
@@ -404,7 +365,6 @@ class EditorApp:
         self._txn_active = False
         self._txn_before_cells: Dict[str, Optional[Obstacle]] = {}
         self._txn_after_cells: Dict[str, Optional[Obstacle]] = {}
-        self._txn_before_start = self.level.start
         self._txn_before_width = self.level.width
 
         # view state
@@ -444,10 +404,6 @@ class EditorApp:
                    command=self.on_width_change).pack(side="left", padx=(6, 0))
         tk.Button(wrow, text="Apply", command=self.on_width_change).pack(side="left", padx=6)
 
-        tk.Label(left, text="Mode", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(6, 0))
-        tk.Radiobutton(left, text="Paint obstacles", variable=self.mode_var, value="paint").pack(anchor="w")
-        tk.Radiobutton(left, text="Place start", variable=self.mode_var, value="start").pack(anchor="w")
-
         tk.Label(left, text="").pack(pady=6)
 
         tk.Label(left, text="Obstacle Shape", font=("Segoe UI", 10, "bold")).pack(anchor="w")
@@ -474,7 +430,6 @@ class EditorApp:
                       "• Endcap zone (last 6 cols) is locked",
                  justify="left", fg="#444").pack(anchor="w")
 
-        # Canvas with horizontal scrollbar
         self.canvas = tk.Canvas(right, bg="#101010", highlightthickness=0)
         self.hbar = tk.Scrollbar(right, orient="horizontal", command=self.canvas.xview)
         self.canvas.configure(xscrollcommand=self.hbar.set)
@@ -482,11 +437,9 @@ class EditorApp:
         self.canvas.pack(side="top", fill="both", expand=True)
         self.hbar.pack(side="bottom", fill="x")
 
-        # Status bar
         self.status = tk.Label(right, text="x=?, y=?", anchor="w", fg="#ddd", bg="#202020")
         self.status.pack(side="bottom", fill="x")
 
-        # Bindings
         self.canvas.bind("<Configure>", self.on_canvas_resize)
         self.canvas.bind("<Motion>", self.on_motion)
 
@@ -498,12 +451,10 @@ class EditorApp:
         self.canvas.bind("<B3-Motion>", self.on_right_drag)
         self.canvas.bind("<ButtonRelease-3>", self.on_right_up)
 
-        # Horizontal scroll wheel
         self.canvas.bind("<MouseWheel>", self.on_wheel)
-        self.canvas.bind("<Button-4>", lambda e: self.canvas.xview_scroll(-3, "units"))  # Linux
+        self.canvas.bind("<Button-4>", lambda e: self.canvas.xview_scroll(-3, "units"))
         self.canvas.bind("<Button-5>", lambda e: self.canvas.xview_scroll(3, "units"))
 
-        # Hotkeys
         self.root.bind_all("<Control-c>", lambda e: self.copy_selection())
         self.root.bind_all("<Control-x>", lambda e: self.cut_selection())
         self.root.bind_all("<Control-v>", lambda e: self.paste_clipboard())
@@ -524,15 +475,12 @@ class EditorApp:
     # -------- View / layout --------
 
     def on_canvas_resize(self, e: tk.Event) -> None:
-        # Center vertically: compute y offset for drawing grid
         grid_h_px = GRID_H * CELL
         self._y_offset_px = max(0, (e.height - grid_h_px) // 2)
         self.redraw_all()
 
     def _rebuild_canvas_region(self) -> None:
-        # Scroll only horizontally; keep a reasonable scrollregion height (no y scrolling)
         wpx = self.level.width * CELL
-        # make scrollregion tall enough for the centered grid
         hpx = max(GRID_H * CELL + 2 * self._y_offset_px, GRID_H * CELL)
         self.canvas.configure(scrollregion=(0, 0, wpx, hpx))
 
@@ -562,13 +510,11 @@ class EditorApp:
             return
 
         self.begin_txn()
-        self.record_before_width_start()
-
         old_w = self.level.width
+
         self.level.resize_width(w)
         self.level.strip_endcap_from_authored()
 
-        self.record_after_width_start()
         self.commit_txn()
 
         if self.level.width != old_w:
@@ -584,16 +530,7 @@ class EditorApp:
         self._txn_active = True
         self._txn_before_cells.clear()
         self._txn_after_cells.clear()
-        self._txn_before_start = self.level.start
         self._txn_before_width = self.level.width
-
-    def record_before_width_start(self) -> None:
-        # already captured in begin_txn fields
-        pass
-
-    def record_after_width_start(self) -> None:
-        # captured at commit time
-        pass
 
     def touch_cell_before(self, x: int, y: int) -> None:
         k = self.level.key(x, y)
@@ -609,7 +546,6 @@ class EditorApp:
         if not self._txn_active:
             return
 
-        # include any cells that were changed but not recorded after (safety)
         for k in list(self._txn_before_cells.keys()):
             if k not in self._txn_after_cells:
                 xs, ys = k.split(",")
@@ -618,15 +554,11 @@ class EditorApp:
         act = UndoAction(
             before_cells=dict(self._txn_before_cells),
             after_cells=dict(self._txn_after_cells),
-            before_start=self._txn_before_start,
-            after_start=self.level.start,
             before_width=self._txn_before_width,
             after_width=self.level.width,
         )
 
-        # skip no-op
         if (act.before_cells == act.after_cells and
-            act.before_start == act.after_start and
             act.before_width == act.after_width):
             self._txn_active = False
             return
@@ -639,10 +571,8 @@ class EditorApp:
             return
         act = self._undo.pop()
 
-        # revert width first
         self.level.resize_width(act.before_width)
 
-        # revert obstacles
         for k, prev in act.before_cells.items():
             xs, ys = k.split(",")
             x, y = int(xs), int(ys)
@@ -653,8 +583,6 @@ class EditorApp:
             else:
                 self.level.obstacles[k] = prev
 
-        # revert start
-        self.level.start = act.before_start
         self.level.strip_endcap_from_authored()
 
         self.width_var.set(self.level.width)
@@ -667,13 +595,11 @@ class EditorApp:
         self.canvas.delete("all")
         self._rebuild_canvas_region()
 
-        # draw authored cells
         for y in range(self.level.height):
             for x in range(self.level.width):
                 self._draw_cell(x, y, tag=f"cell_{x}_{y}")
 
         self._draw_grid()
-        self._draw_start()
         self._draw_endcap_ghost()
         self._draw_portal_icon()
         self._draw_selection_overlay()
@@ -682,7 +608,6 @@ class EditorApp:
         tag = f"cell_{x}_{y}"
         self.canvas.delete(tag)
         self._draw_cell(x, y, tag=tag)
-        self._draw_start()
         self._draw_endcap_ghost()
         self._draw_portal_icon()
         self._draw_selection_overlay()
@@ -705,7 +630,6 @@ class EditorApp:
             yy = y0 + y * CELL
             self.canvas.create_line(0, yy, wpx, yy, fill=GRID_LINE)
 
-        # highlight locked endcap region boundary
         x0 = self.level.endcap_x0() * CELL
         self.canvas.create_line(x0, y0, x0, y1, fill="#7a2cff", width=3)
 
@@ -717,15 +641,6 @@ class EditorApp:
             self._draw_obstacle(x0, y0, x1, y1, obs, tag)
 
         self.canvas.create_rectangle(x0, y0, x1, y1, outline=GRID_LINE, width=1, tags=tag)
-
-    def _draw_start(self) -> None:
-        self.canvas.delete("start")
-        x, y = self.level.start
-        x0, y0, x1, y1 = self._cell_rect(x, y)
-        pad = 5
-        midy = (y0 + y1) / 2
-        pts = [x0 + pad, y0 + pad, x1 - pad, midy, x0 + pad, y1 - pad]
-        self.canvas.create_polygon(pts, fill="#22ff55", outline="#0b6b1f", width=2, tags="start")
 
     def _draw_obstacle(self, x0, y0, x1, y1, obs: Obstacle, tag: str, ghost: bool = False) -> None:
         shape = obs.shape
@@ -786,13 +701,11 @@ class EditorApp:
         if not self.level.in_bounds(px, py):
             return
 
-        # occupy 3 cells vertically: y-1 .. y+1
         y_top = max(0, py - 1)
         y_bot = min(self.level.height - 1, py + 1)
 
         x0, y0, x1, y1 = self._cell_rect(px, y_top)
         _, _, _, y1b = self._cell_rect(px, y_bot)
-        # a slightly inset oval
         pad = 3
         self.canvas.create_oval(
             x0 + pad, y0 + pad, x1 - pad, y1b - pad,
@@ -823,7 +736,6 @@ class EditorApp:
         if not b:
             return
         x0, y0, x1, y1 = b
-        # clamp selection out of endcap to avoid confusion
         x1 = min(x1, self.level.endcap_x0() - 1) if self.level.endcap_x0() > 0 else x1
         if x1 < x0:
             return
@@ -890,9 +802,7 @@ class EditorApp:
 
         tx, ty = self._last_mouse_cell
         w = int(self._clipboard["w"])
-        h = int(self._clipboard["h"])
 
-        # expand width if needed, but keep endcap locked at the end
         need_w = tx + w + ENDCAP_W
         if need_w > self.level.width:
             self.begin_txn()
@@ -927,7 +837,7 @@ class EditorApp:
             return
         x, y = cell
 
-        if (e.state & 0x0001) != 0:  # Shift => selection
+        if (e.state & 0x0001) != 0:
             self._selecting = True
             self._sel_a = cell
             self._sel_b = cell
@@ -938,7 +848,6 @@ class EditorApp:
         self._erasing = False
 
         self.begin_txn()
-        self._txn_before_start = self.level.start
         self._txn_before_width = self.level.width
 
         self._apply_left_action(x, y)
@@ -979,7 +888,6 @@ class EditorApp:
         self._erasing = True
 
         self.begin_txn()
-        self._txn_before_start = self.level.start
         self._txn_before_width = self.level.width
 
         self.touch_cell_before(x, y)
@@ -1009,13 +917,6 @@ class EditorApp:
 
     def _apply_left_action(self, x: int, y: int) -> None:
         if self.level.in_endcap(x):
-            return
-
-        if self.mode_var.get() == "start":
-            old = self.level.start
-            self.level.set_start(x, y)
-            self.redraw_cell(*old)
-            self.redraw_cell(x, y)
             return
 
         shape = self.shape_var.get()
@@ -1058,7 +959,6 @@ class EditorApp:
         if not path:
             return
 
-        # ensure clean authored + auto endcap on export
         self.level.strip_endcap_from_authored()
         data = self.level.to_json_obj()
 
@@ -1090,7 +990,6 @@ class EditorApp:
         if not messagebox.askyesno("New", "Clear the level?"):
             return
         self.level = Level(width=DEFAULT_W)
-        self.level.clamp_start()
         self.width_var.set(self.level.width)
         self._rebuild_canvas_region()
         self.redraw_all()

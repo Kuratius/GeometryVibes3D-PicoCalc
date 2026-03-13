@@ -89,13 +89,13 @@ bool Game::loadLevel(const char* path) {
 
     size_t got = 0;
     if (!file_->seek(0)) { unloadLevel(); return false; }
-    if (!file_->read(&levelHdr, sizeof(LevelHeaderV1), got) || got != sizeof(LevelHeaderV1)) {
+    if (!file_->read(&levelHdr, sizeof(LevelHeader), got) || got != sizeof(LevelHeader)) {
         unloadLevel();
         return false;
     }
 
-    if (std::memcmp(levelHdr.magic, "GVL1", 4) != 0) { unloadLevel(); return false; }
-    if (levelHdr.version != 1) { unloadLevel(); return false; }
+    if (std::memcmp(levelHdr.magic, "GVL2", 4) != 0) { unloadLevel(); return false; }
+    if (levelHdr.version != 2) { unloadLevel(); return false; }
     if (levelHdr.height != kLevelHeight) { unloadLevel(); return false; }
 
     finished_ = false;
@@ -107,15 +107,19 @@ bool Game::loadLevel(const char* path) {
 
     // ---- spawn from header (cell coords) ----
     const int h = int(levelHdr.height);
-    const int startY = (h > 0) ? clampi(int(levelHdr.startY), 0, h - 1) : 0;
-    const int startX = clampi(int(levelHdr.startX), 0, int(levelHdr.width) - 1);
+
+    const int startRow = (h > 0)
+        ? clampi(kStartRow, 0, h - 1)
+        : 0;
+
+    const int startCol = clampi(kStartColumn, 0, int(levelHdr.width) - 1);
 
     // Place the ship at the center of the start cell in Y.
-    const fx rowY0 = worldYForRow(startY);
+    const fx rowY0 = worldYForRow(startRow);
     shipState.y = rowY0 + fx::fromInt(kCellSize / 2);
 
-    // Start the scroll so the startX column is under the ship.
-    xScroll = fx::fromInt(startX * kCellSize);
+    // Start the scroll so the start column is under the ship.
+    xScroll = fx::fromInt(startCol * kCellSize);
 
     hud_.setEvent((std::string("File loaded: ") + path).c_str());
     hud_.setLevelLabel(path);
@@ -206,6 +210,8 @@ void Game::update(const InputState& in, fx dt) {
         hit = checkCollisionAt(shipState.y);
         if (hit) {
             runState = RunState::Dead;
+            hud_.setControlsHint(kControlsHintContinue);
+            hud_.setEventMessage("Game Over!", false);
             finished_ = false;
             return;
         }

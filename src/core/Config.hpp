@@ -8,6 +8,8 @@ constexpr int kCellSize = 12;
 constexpr int kLevelHeight = 9; // keep this aligned with the on-disk format (GVL1).
 
 // ---- Ship / screen conventions ----
+constexpr int kStartColumn = 6;
+constexpr int kStartRow = 1;
 constexpr int kShipFixedX = 40; // keep the ship fixed at this world-space X.
 
 // ---- Game tuning ----

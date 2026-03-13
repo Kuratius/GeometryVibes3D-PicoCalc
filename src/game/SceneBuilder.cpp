@@ -135,7 +135,7 @@ void SceneBuilder::drawPortalRays(RenderList& rl, const Camera& cam, const Game&
     if (!game.hasLevel()) return;
     if (!portalRays.initialized) return;
 
-    const LevelHeaderV1& h = game.levelHeader();
+    const LevelHeader& h = game.levelHeader();
     const int portalCol = portal_abs_x(h);
     if (portalCol < 0 || portalCol >= int(h.width)) return;
 
@@ -506,7 +506,7 @@ void SceneBuilder::buildScene(RenderList& rl,
         }
     }
 
-    const LevelHeaderV1& h = game.levelHeader();
+    const LevelHeader& h = game.levelHeader();
     const int portalCol = portal_abs_x(h);
     const int py = (int)h.portalY;
 

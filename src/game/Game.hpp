@@ -30,7 +30,7 @@ public:
     bool loadLevel(const char* path);
     void unloadLevel();
     bool hasLevel() const { return file_ != nullptr; }
-    const LevelHeaderV1& levelHeader() const { return levelHdr; }
+    const LevelHeader& levelHeader() const { return levelHdr; }
 
     bool readLevelColumn(uint16_t i, Column56& out) const;
 
@@ -72,7 +72,7 @@ private:
 
     IFileSystem* fs_ = nullptr;
     IFile* file_ = nullptr;
-    LevelHeaderV1 levelHdr{};
+    LevelHeader levelHdr{};
     Hud hud_{};
 };
 

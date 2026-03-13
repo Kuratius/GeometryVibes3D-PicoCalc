@@ -23,7 +23,7 @@ public:
     
     static constexpr int W = 320;
     static constexpr int H = 320;
-    static constexpr int SLAB_ROWS = 16;
+    static constexpr int SLAB_ROWS = 8;
 
 private:
     static constexpr unsigned SPI_BAUD_HZ = 62'500'000;
@@ -40,7 +40,7 @@ private:
     static constexpr int MAX_LINE_BINNED     = 8192;
     static constexpr int MAX_FILLRECTS       = 128;
     static constexpr int MAX_FILLRECT_BINNED = 512;
-    static constexpr int MAX_TEXTS           = 32;
+    static constexpr int MAX_TEXTS           = 16;
     static constexpr int MAX_TEXT_BINNED     = 256;
 
     struct Line {

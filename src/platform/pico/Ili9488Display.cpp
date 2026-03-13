@@ -537,10 +537,14 @@ void Ili9488Display::binFrameTexts(Frame& f) {
         const TextInst& t = f.texts[i];
         if (!t.text) continue;
 
+        const int w = t.text->width();
+        const int h = t.text->height();
+        if (w <= 0 || h <= 0) continue;
+
         const int x0 = t.x;
         const int y0 = t.y;
-        const int x1 = x0 + t.text->width() - 1;
-        const int y1 = y0 + t.text->height() - 1;
+        const int x1 = x0 + w - 1;
+        const int y1 = y0 + h - 1;
 
         if (x1 < 0 || x0 >= W || y1 < 0 || y0 >= H) continue;
 
@@ -575,10 +579,14 @@ void Ili9488Display::binFrameTexts(Frame& f) {
         const TextInst& t = f.texts[i];
         if (!t.text) continue;
 
+        const int w = t.text->width();
+        const int h = t.text->height();
+        if (w <= 0 || h <= 0) continue;
+
         const int x0 = t.x;
         const int y0 = t.y;
-        const int x1 = x0 + t.text->width() - 1;
-        const int y1 = y0 + t.text->height() - 1;
+        const int x1 = x0 + w - 1;
+        const int y1 = y0 + h - 1;
 
         if (x1 < 0 || x0 >= W || y1 < 0 || y0 >= H) continue;
 
@@ -749,6 +757,24 @@ void Ili9488Display::drawFillRectIntoSlab(uint16_t* slab, int slabY0, int slabY1
     }
 }
 
+static inline uint16_t blend565(uint16_t dst, uint16_t src, uint8_t a) {
+    const uint32_t ia = 255u - a;
+
+    const uint32_t dr = (dst >> 11) & 0x1F;
+    const uint32_t dg = (dst >> 5)  & 0x3F;
+    const uint32_t db =  dst        & 0x1F;
+
+    const uint32_t sr = (src >> 11) & 0x1F;
+    const uint32_t sg = (src >> 5)  & 0x3F;
+    const uint32_t sb =  src        & 0x1F;
+
+    const uint32_t r = (dr * ia + sr * a + 127u) / 255u;
+    const uint32_t g = (dg * ia + sg * a + 127u) / 255u;
+    const uint32_t b = (db * ia + sb * a + 127u) / 255u;
+
+    return uint16_t((r << 11) | (g << 5) | b);
+}
+
 void Ili9488Display::drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, const TextInst& inst) {
     const Text* text = inst.text;
     if (!text) return;
@@ -757,6 +783,9 @@ void Ili9488Display::drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, co
     const int textH = text->height();
     if (textW <= 0 || textH <= 0) return;
     if (inst.alpha == 0) return;
+
+    const bool inverted = (inst.styleFlags & TextStyle::Inverted) != 0;
+    const bool hasBg    = (inst.styleFlags & TextStyle::Background) != 0;
 
     const int dstX0 = inst.x;
     const int dstY0 = inst.y;
@@ -769,24 +798,25 @@ void Ili9488Display::drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, co
 
     const int xStart = (dstX0 < 0) ? 0 : dstX0;
     const int xEnd   = (dstX1 >= W) ? (W - 1) : dstX1;
-
     const int yStart = (dstY0 < slabY0) ? slabY0 : dstY0;
     const int yEnd   = (dstY1 > slabY1) ? slabY1 : dstY1;
-
-    const uint16_t litColor = scale565(inst.color565, inst.alpha);
-    const uint16_t fgColor = inst.inverted ? 0u : litColor;
-    const uint16_t bgColor = inst.inverted ? litColor : 0u;
 
     for (int y = yStart; y <= yEnd; ++y) {
         const int ty = y - dstY0;
         const int yLocal = y - slabY0;
+        uint16_t* row = slab + yLocal * W;
 
         for (int x = xStart; x <= xEnd; ++x) {
             const int tx = x - dstX0;
-            if (text->testPixel(tx, ty)) {
-                slab[yLocal * W + x] = fgColor;
-            } else if (inst.inverted) {
-                slab[yLocal * W + x] = bgColor;
+            const bool on = text->testPixel(tx, ty);
+
+            if (inverted) {
+                const uint16_t target = on ? 0x0000 : inst.color565;
+                row[x] = blend565(row[x], target, inst.alpha);
+            } else if (on) {
+                row[x] = blend565(row[x], inst.color565, inst.alpha);
+            } else if (hasBg) {
+                row[x] = blend565(row[x], inst.bgColor565, inst.alpha);
             }
         }
     }

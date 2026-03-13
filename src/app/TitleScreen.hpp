@@ -2,7 +2,7 @@
 
 #include "platform/IFileSystem.hpp"
 #include "platform/IDisplay.hpp"
-#include "game/Input.hpp"
+#include "game/InputState.hpp"
 #include "render/Text.hpp"
 #include "render/Fixed.hpp"
 #include <array>

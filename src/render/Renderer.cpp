@@ -1,4 +1,5 @@
 #include "Renderer.hpp"
+#include "app/StatusOverlay.hpp"
 #include "game/Config.hpp"
 #include "game/Game.hpp"
 #include "game/Hud.hpp"
@@ -397,9 +398,12 @@ void Renderer::addRightTriPrism(RenderList& rl, const Vec3fx& pos, uint16_t colo
     }
 }
 
-void Renderer::addText(RenderList& rl, const Text& text, int16_t x, int16_t y, uint16_t color, uint8_t alpha, bool inverted) const {
+void Renderer::addText(RenderList& rl, const Text& text, int16_t x, int16_t y,
+                       uint16_t color, uint8_t alpha, bool inverted,
+                       uint16_t bgColor565, uint8_t styleFlags) const
+{
     if (!text.empty()) {
-        rl.addText(&text, x, y, color, alpha, inverted);
+        rl.addText(&text, x, y, color, alpha, inverted, bgColor565, styleFlags);
     }
 }
 
@@ -571,7 +575,7 @@ void Renderer::buildScene(RenderList& rl, const Game& game, fx scrollX) const
     }
 }
 
-void Renderer::buildOverlay(RenderList& rl, const Game& game) const {
+void Renderer::buildHud(RenderList& rl, const Game& game) const {
     static constexpr uint16_t kHud = 0xFFFF; // white
 
     const Hud& hud = game.hud();
@@ -585,7 +589,6 @@ void Renderer::buildOverlay(RenderList& rl, const Game& game) const {
 
     const int progressW = hud.progress().width();
 
-    // Top-right progress bar
     static constexpr int kBarW = 64;
     static constexpr int kBarH = 8;
     const int barX = 320 - 4 - progressW - 6 - kBarW;
@@ -596,13 +599,11 @@ void Renderer::buildOverlay(RenderList& rl, const Game& game) const {
     if (fillW < 0) fillW = 0;
     if (fillW > (kBarW - 2)) fillW = (kBarW - 2);
 
-    // Outer rectangle
-    rl.addLine((int16_t)barX,             (int16_t)barY,             (int16_t)(barX + kBarW - 1), (int16_t)barY,             kHud);
-    rl.addLine((int16_t)(barX + kBarW - 1), (int16_t)barY,           (int16_t)(barX + kBarW - 1), (int16_t)(barY + kBarH - 1), kHud);
-    rl.addLine((int16_t)(barX + kBarW - 1), (int16_t)(barY + kBarH - 1), (int16_t)barX,           (int16_t)(barY + kBarH - 1), kHud);
-    rl.addLine((int16_t)barX,             (int16_t)(barY + kBarH - 1), (int16_t)barX,             (int16_t)barY,             kHud);
+    rl.addLine((int16_t)barX, (int16_t)barY, (int16_t)(barX + kBarW - 1), (int16_t)barY, kHud);
+    rl.addLine((int16_t)(barX + kBarW - 1), (int16_t)barY, (int16_t)(barX + kBarW - 1), (int16_t)(barY + kBarH - 1), kHud);
+    rl.addLine((int16_t)(barX + kBarW - 1), (int16_t)(barY + kBarH - 1), (int16_t)barX, (int16_t)(barY + kBarH - 1), kHud);
+    rl.addLine((int16_t)barX, (int16_t)(barY + kBarH - 1), (int16_t)barX, (int16_t)barY, kHud);
 
-    // Filled portion
     if (fillW > 0) {
         rl.addFillRect(
             (int16_t)(barX + 1),
@@ -623,6 +624,32 @@ void Renderer::buildOverlay(RenderList& rl, const Game& game) const {
             addText(rl, hud.eventText(), 4, int16_t(320 - 12), eventColor);
         }
     }
+}
+
+void Renderer::buildStatusOverlay(RenderList& rl, const StatusOverlay& overlay) const {
+    if (!overlay.visible()) return;
+
+    static constexpr uint16_t kPanelBg    = 0x0000; // black
+    static constexpr uint16_t kPanelBorder= 0xFFFF; // white
+    static constexpr uint16_t kFooter     = 0x8410; // gray
+
+    static Text footerText{ "F1 to hide" };
+
+    const auto& lines = overlay.lines();
+    if (lines.empty()) return;
+
+    static constexpr int lineStep = 10;
+    const int panelX = 8;
+    const int panelH = int(lines.size()) * lineStep + 8 + lineStep;
+
+    int y = 320 - panelH - lineStep - 8;
+    for (const auto& line : lines) {
+        addText(rl, line.text, (int16_t)(panelX), (int16_t)y, line.color565, 255, false, 0, TextStyle::Background );
+        y += lineStep;
+    }
+
+    y += (lineStep + 8);
+    addText(rl, footerText, (int16_t)(panelX), (int16_t)y, kFooter, 255, false, 0, TextStyle::Background);
 }
 
 } // namespace gv

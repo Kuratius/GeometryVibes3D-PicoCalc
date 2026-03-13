@@ -38,6 +38,7 @@ add_executable(GeometryVibes3D-PicoCalc
     src/main.cpp
     src/app/App.cpp
     src/app/TitleScreen.cpp
+    src/app/StatusOverlay.cpp
     src/game/Hud.cpp
     src/game/Game.cpp
     src/render/Text.cpp

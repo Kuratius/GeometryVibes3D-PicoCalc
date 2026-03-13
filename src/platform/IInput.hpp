@@ -1,5 +1,5 @@
 #pragma once
-#include "game/Input.hpp"
+#include "game/InputState.hpp"
 
 namespace gv {
 

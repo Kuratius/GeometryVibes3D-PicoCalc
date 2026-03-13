@@ -28,7 +28,7 @@ bool Text::setText(std::string_view s) {
     }
     text_[len_] = '\0';
 
-    dirty_ = true;
+    rebuild();
     return true;
 }
 
@@ -44,38 +44,13 @@ bool Text::setText(const char* s) {
 void Text::clear() {
     text_[0] = '\0';
     len_ = 0;
-
     width_ = 0;
     height_ = 0;
     bitBytesUsed_ = 0;
     bits_.fill(0);
-
-    dirty_ = false;
-}
-
-int Text::width() const {
-    rebuildIfNeeded();
-    return width_;
-}
-
-int Text::height() const {
-    rebuildIfNeeded();
-    return height_;
-}
-
-const std::array<uint8_t, Text::BIT_CAP>& Text::bits() const {
-    rebuildIfNeeded();
-    return bits_;
-}
-
-std::size_t Text::bitByteCount() const {
-    rebuildIfNeeded();
-    return bitBytesUsed_;
 }
 
 bool Text::testPixel(int x, int y) const {
-    rebuildIfNeeded();
-
     if (x < 0 || y < 0 || x >= width_ || y >= height_) return false;
 
     const int bitIndex = y * MAX_W + x;
@@ -98,9 +73,7 @@ void Text::setBit(std::array<uint8_t, BIT_CAP>& bits, int x, int y, bool on) {
     }
 }
 
-void Text::rebuildIfNeeded() const {
-    if (!dirty_) return;
-
+void Text::rebuild() {
     bits_.fill(0);
 
     width_ = int(len_) * GLYPH_W;
@@ -121,8 +94,6 @@ void Text::rebuildIfNeeded() const {
             }
         }
     }
-
-    dirty_ = false;
 }
 
 } // namespace gv

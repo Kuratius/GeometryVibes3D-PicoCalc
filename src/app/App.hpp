@@ -6,6 +6,7 @@
 #include "render/RenderList.hpp"
 #include "render/Text.hpp"
 #include "TitleScreen.hpp"
+#include "StatusOverlay.hpp"
 #include <cstddef>
 
 namespace gv {
@@ -50,15 +51,16 @@ private:
     Game game;
     Renderer renderer;
     RenderList rl;
-    TitleScreen titleScreen_;
-
+    
     AppState appState_ = AppState::TitleScreen;
     std::size_t selectedLevel_ = 0;
-
+    
     Text menuTitle_{ "SELECT LEVEL" };
     Text levelTexts_[kLevelCount]{};
-
+    
     int w{}, h{};
+    StatusOverlay statusOverlay_;
+    TitleScreen titleScreen_;
 };
 
 } // namespace gv

@@ -3,11 +3,13 @@
 
 namespace gv {
 
-inline constexpr char kStarGlyph = char(127);
+namespace {
+
+static constexpr uint32_t kFrameUs = 33333; // ~30 FPS
+
+} // namespace
 
 int App::run(IPlatform& platform) {
-    static constexpr uint32_t kFrameUs = 33333; // ~30 FPS
-
     plat = &platform;
     init(*plat);
 
@@ -36,7 +38,8 @@ int App::run(IPlatform& platform) {
 
         in.confirm = kb.pressed(KEY_ENTER) || kb.pressed(KEY_RETURN);
         in.back    = kb.pressed(KEY_ESC)   || kb.pressed(KEY_BACKSPACE);
-        in.pausePressed = kb.pressed(KEY_ESC) || kb.pressed(KEY_F1) || kb.pressed(KEY_POWER);
+        in.pausePressed = kb.pressed(KEY_ESC) || kb.pressed(KEY_POWER);
+        in.overlayTogglePressed = kb.pressed(KEY_F1);
 
         accumUs -= kFrameUs;
 
@@ -83,6 +86,8 @@ void App::init(IPlatform& platform) {
     if (titleScreen_.load(platform.fs(), "assets/title.rgb565")) {
         appState_ = AppState::TitleScreen;
     } else {
+        statusOverlay_.addError("Error: Could not load title.rgb565.");
+        statusOverlay_.addInfo("Is the SD card inserted?");
         appState_ = AppState::LevelSelect;
     }
 
@@ -99,6 +104,8 @@ bool App::loadSelectedLevel() {
 
     const LevelEntry& e = kLevels[selectedLevel_];
     if (!game.loadLevel(e.path)) {
+        statusOverlay_.addError("Failed to load level");
+        statusOverlay_.addInfo(e.path);
         return false;
     }
 
@@ -118,21 +125,43 @@ void App::buildLevelSelect(RenderList& rl) const {
 
     for (std::size_t i = 0; i < kLevelCount; ++i) {
         const bool selected = (i == selectedLevel_);
-        rl.addText(&levelTexts_[i], (int16_t)itemX, (int16_t)(startY + int(i) * lineStep), kWhite, 255, selected);
+        rl.addText(&levelTexts_[i],(int16_t)itemX, (int16_t)(startY + int(i) * lineStep), kWhite, 255, selected);
     }
 }
 
 void App::tick(const InputState& in, uint32_t dtUs) {
+    auto rebuildLevelSelect = [&]() {
+        rl.clear();
+        buildLevelSelect(rl);
+        renderer.buildStatusOverlay(rl, statusOverlay_);
+    };
+
+    auto rebuildGameplay = [&]() {
+        rl.clear();
+        renderer.buildScene(rl, game, game.scrollX());
+        renderer.buildHud(rl, game);
+        renderer.buildStatusOverlay(rl, statusOverlay_);
+    };
+
+    auto returnToLevelSelect = [&]() {
+        appState_ = AppState::LevelSelect;
+        game.reset();
+        renderer.resetEffects();
+        rebuildLevelSelect();
+    };
+
     if (appState_ == AppState::TitleScreen) {
         titleScreen_.update(in);
         if (titleScreen_.accepted()) {
             titleScreen_.unload();
             appState_ = AppState::LevelSelect;
-
-            rl.clear();
-            buildLevelSelect(rl);
+            rebuildLevelSelect();
         }
         return;
+    }
+
+    if (in.overlayTogglePressed) {
+        statusOverlay_.toggleVisible();
     }
 
     if (appState_ == AppState::LevelSelect) {
@@ -146,17 +175,13 @@ void App::tick(const InputState& in, uint32_t dtUs) {
             (void)loadSelectedLevel();
         }
 
-        rl.clear();
-        buildLevelSelect(rl);
+        rebuildLevelSelect();
         return;
     }
 
     if (in.pausePressed && !game.paused()) {
         game.pause();
-
-        rl.clear();
-        renderer.buildScene(rl, game, game.scrollX());
-        renderer.buildOverlay(rl, game);
+        rebuildGameplay();
         return;
     }
 
@@ -165,9 +190,7 @@ void App::tick(const InputState& in, uint32_t dtUs) {
             game.resume();
         }
 
-        rl.clear();
-        renderer.buildScene(rl, game, game.scrollX());
-        renderer.buildOverlay(rl, game);
+        rebuildGameplay();
         return;
     }
 
@@ -185,32 +208,17 @@ void App::tick(const InputState& in, uint32_t dtUs) {
     renderer.update(dt);
 
     if (game.state() == RunState::Dead && !renderer.explosionActive()) {
-        appState_ = AppState::LevelSelect;
-        game.reset();
-        renderer.resetEffects();
-
-        rl.clear();
-        buildLevelSelect(rl);
+        returnToLevelSelect();
         return;
     }
 
     if (game.finishedScroll()) {
-        appState_ = AppState::LevelSelect;
-        game.reset();
-        renderer.resetEffects();
-
-        rl.clear();
-        buildLevelSelect(rl);
+        returnToLevelSelect();
         return;
     }
 
     if (in.back) {
-        appState_ = AppState::LevelSelect;
-        game.reset();
-        renderer.resetEffects();
-
-        rl.clear();
-        buildLevelSelect(rl);
+        returnToLevelSelect();
         return;
     }
 
@@ -230,9 +238,7 @@ void App::tick(const InputState& in, uint32_t dtUs) {
 
     renderer.setCamera(cam);
 
-    rl.clear();
-    renderer.buildScene(rl, game, game.scrollX());
-    renderer.buildOverlay(rl, game);
+    rebuildGameplay();
 }
 
 } // namespace gv

@@ -2,7 +2,7 @@
 #include <cstdint>
 #include "render/Fixed.hpp"
 #include "game/Level.hpp"
-#include "game/Input.hpp"
+#include "game/InputState.hpp"
 #include "platform/IFileSystem.hpp"
 #include "Hud.hpp"
 

@@ -1,37 +1,10 @@
-#include "Renderer.hpp"
-#include "app/StatusOverlay.hpp"
-#include "game/Config.hpp"
-#include "game/Game.hpp"
-#include "game/Hud.hpp"
-#include "game/Playfield.hpp"
-#include "game/LevelMath.hpp"
+#include "SceneBuilder.hpp"
+#include "Game.hpp"
+#include "Hud.hpp"
+#include "Playfield.hpp"
+#include "LevelMath.hpp"
 
 namespace gv {
-
-void Renderer::setCamera(const Camera& c) {
-    cam = c;
-    buildCameraBasis(cam);
-}
-
-void Renderer::update(fx dt) {
-    dtCache_ = dt;
-    if (!explosionActive_) return;
-
-    explosionAge_ += dt;
-
-    static constexpr fx kExplosionLife = fx::fromRatio(7, 10); // 0.7 s
-    if (explosionAge_ >= kExplosionLife) {
-        explosionActive_ = false;
-    }
-}
-
-void Renderer::resetEffects() {
-    explosionActive_ = false;
-    explosionAge_ = fx::zero();
-    trailCount_ = 0;
-    trailHead_ = 0;
-    portalRaysInit_ = false;
-}
 
 static inline fx fi(int v) { return fx::fromInt(v); }
 
@@ -39,7 +12,8 @@ static inline Vec3fx add3(const Vec3fx& a, const Vec3fx& b) {
     return Vec3fx{ a.x + b.x, a.y + b.y, a.z + b.z };
 }
 
-static inline void line3(const Vec3fx& A, const Vec3fx& B, uint16_t color, const Camera& cam, RenderList& rl) {
+static inline void line3(const Vec3fx& A, const Vec3fx& B, uint16_t color,
+                         const Camera& cam, RenderList& rl) {
     Vec2i a, b;
     if (projectPoint(cam, A, a) && projectPoint(cam, B, b))
         rl.addLine(a.x, a.y, b.x, b.y, color);
@@ -61,17 +35,27 @@ static inline int randRange(uint32_t& s, int lo, int hi) {
 }
 
 static inline fx fxFromMilli(int v) {
-    // v / 1000
     return fx::fromRaw((v * (1 << fx::SHIFT)) / 1000);
 }
 
-void Renderer::startShipExplosion(const Game& game, uint32_t seed) {
+void SceneBuilder::updateExplosion(ExplosionState& explosion, fx dt) const {
+    if (!explosion.active) return;
+
+    explosion.age += dt;
+
+    static constexpr fx kExplosionLife = fx::fromRatio(7, 10); // 0.7 s
+    if (explosion.age >= kExplosionLife) {
+        explosion.active = false;
+    }
+}
+
+void SceneBuilder::startShipExplosion(ExplosionState& explosion, const Game& game, uint32_t seed) const {
     uint32_t s = seed ? seed : 0xA341316Cu;
 
     const Vec3fx shipPos{ game.shipRenderX(), game.ship().y, fi(kCellSize / 2) };
 
-    for (int i = 0; i < kExplosionChunkCount; ++i) {
-        ExplosionChunk& ch = explosion_[i];
+    for (int i = 0; i < ExplosionState::CHUNK_COUNT; ++i) {
+        ExplosionChunk& ch = explosion.chunks[i];
 
         const int ox = randRange(s, -3, 3);
         const int oy = randRange(s, -3, 3);
@@ -87,7 +71,6 @@ void Renderer::startShipExplosion(const Game& game, uint32_t seed) {
         int vy = randRange(s, -90, 90);
         int vz = randRange(s, -30, 40);
 
-        // Bias a few chunks toward the camera.
         if ((i & 1) == 0) {
             vz += randRange(s, 35, 85);
         }
@@ -103,15 +86,13 @@ void Renderer::startShipExplosion(const Game& game, uint32_t seed) {
         ch.c = Vec3fx{ fi(0),   fi( sy), fi(-sz) };
     }
 
-    explosionAge_ = fx::zero();
-    explosionActive_ = true;
+    explosion.age = fx::zero();
+    explosion.active = true;
 }
 
-void Renderer::initPortalRays() const {
-    if (portalRaysInit_) return;
+void SceneBuilder::initPortalRays(PortalRayState& portalRays) const {
+    if (portalRays.initialized) return;
 
-    // 16 evenly spaced directions around the portal center in the Y/Z plane.
-    // These are approximate unit-circle directions in fixed point.
     static constexpr int kDirMilli[16][2] = {
         { 1000,    0 }, {  924,  383 }, {  707,  707 }, {  383,  924 },
         {    0, 1000 }, { -383,  924 }, { -707,  707 }, { -924,  383 },
@@ -119,30 +100,27 @@ void Renderer::initPortalRays() const {
         {    0,-1000 }, {  383, -924 }, {  707, -707 }, {  924, -383 }
     };
 
-    for (int i = 0; i < kPortalRayCount; ++i) {
-        PortalRay& r = portalRays_[i];
+    for (int i = 0; i < PortalRayState::RAY_COUNT; ++i) {
+        PortalRay& r = portalRays.rays[i];
         r.dirX = fxFromMilli(180 + (i % 4) * 40);
         r.dirY = fxFromMilli(kDirMilli[i][0]);
         r.dirZ = fxFromMilli(kDirMilli[i][1]);
 
-        // Stagger the rays so they are already distributed when first seen.
         r.offset = fx::fromInt((i * 3) % 12);
-
-        // Small variation in speed and length.
         r.speed  = fx::fromInt(10 + (i % 5) * 3);
         r.length = fx::fromInt(4 + (i % 4) * 2);
     }
 
-    portalRaysInit_ = true;
+    portalRays.initialized = true;
 }
 
-void Renderer::updatePortalRays(fx dt) const {
-    initPortalRays();
+void SceneBuilder::updatePortalRays(PortalRayState& portalRays, fx dt) const {
+    initPortalRays(portalRays);
 
     static constexpr fx kWrap = fx::fromInt(18);
 
-    for (int i = 0; i < kPortalRayCount; ++i) {
-        PortalRay& r = portalRays_[i];
+    for (int i = 0; i < PortalRayState::RAY_COUNT; ++i) {
+        PortalRay& r = portalRays.rays[i];
         r.offset += r.speed * dt;
 
         if (r.offset > kWrap) {
@@ -151,10 +129,11 @@ void Renderer::updatePortalRays(fx dt) const {
     }
 }
 
-void Renderer::drawPortalRays(RenderList& rl, const Game& game, fx scrollX, uint16_t color) const {
+void SceneBuilder::drawPortalRays(RenderList& rl, const Camera& cam, const Game& game,
+                              fx scrollX, const PortalRayState& portalRays,
+                              uint16_t color) const {
     if (!game.hasLevel()) return;
-
-    initPortalRays();
+    if (!portalRays.initialized) return;
 
     const LevelHeaderV1& h = game.levelHeader();
     const int portalCol = portal_abs_x(h);
@@ -171,8 +150,8 @@ void Renderer::drawPortalRays(RenderList& rl, const Game& game, fx scrollX, uint
 
     const Vec3fx center{ portalX, portalY, portalZ };
 
-    for (int i = 0; i < kPortalRayCount; ++i) {
-        const PortalRay& r = portalRays_[i];
+    for (int i = 0; i < PortalRayState::RAY_COUNT; ++i) {
+        const PortalRay& r = portalRays.rays[i];
 
         const fx r0 = r.offset;
         const fx r1 = r.offset + r.length;
@@ -193,13 +172,13 @@ void Renderer::drawPortalRays(RenderList& rl, const Game& game, fx scrollX, uint
     }
 }
 
-void Renderer::trailPushLevelPoint(fx levelX, fx y, fx z) const {
-    // A large jump usually indicates a reset/spawn; clearing avoids a long diagonal streak.
-    if (trailCount_ > 0) {
-        int lastIdx = trailHead_ - 1;
+void SceneBuilder::trailPushLevelPoint(TrailState& trail, const Camera& cam,
+                                   fx levelX, fx y, fx z) const {
+    if (trail.count > 0) {
+        int lastIdx = trail.head - 1;
         if (lastIdx < 0) lastIdx += kTrailMax;
 
-        const TrailPt last = trail_[lastIdx];
+        const TrailPt last = trail.pts[lastIdx];
 
         Vec2i a{}, b{};
         Vec3fx wa{ last.levelX - levelX + fx::fromInt(kShipFixedX), last.y, last.z };
@@ -209,31 +188,32 @@ void Renderer::trailPushLevelPoint(fx levelX, fx y, fx z) const {
             const int dx = iabs(int(b.x) - int(a.x));
             const int dy = iabs(int(b.y) - int(a.y));
             if (dx + dy > 120) {
-                trailCount_ = 0;
-                trailHead_ = 0;
+                trail.count = 0;
+                trail.head = 0;
             }
         }
     }
 
-    trail_[trailHead_] = TrailPt{ levelX, y, z };
-    ++trailHead_;
-    if (trailHead_ >= kTrailMax) trailHead_ = 0;
+    trail.pts[trail.head] = TrailPt{ levelX, y, z };
+    ++trail.head;
+    if (trail.head >= kTrailMax) trail.head = 0;
 
-    if (trailCount_ < kTrailMax) ++trailCount_;
+    if (trail.count < kTrailMax) ++trail.count;
 }
 
-void Renderer::trailDraw(RenderList& rl, fx scrollX, uint16_t color) const {
-    if (trailCount_ < 2) return;
+void SceneBuilder::trailDraw(RenderList& rl, const Camera& cam,
+                         const TrailState& trail, fx scrollX, uint16_t color) const {
+    if (trail.count < 2) return;
 
-    int start = trailHead_ - trailCount_;
+    int start = trail.head - trail.count;
     if (start < 0) start += kTrailMax;
 
     Vec2i prev{};
     bool havePrev = false;
 
     int idx = start;
-    for (int i = 0; i < trailCount_; ++i) {
-        const TrailPt tp = trail_[idx];
+    for (int i = 0; i < trail.count; ++i) {
+        const TrailPt tp = trail.pts[idx];
 
         const fx wx = tp.levelX - scrollX + fx::fromInt(kShipFixedX);
         Vec3fx w{ wx, tp.y, tp.z };
@@ -254,30 +234,26 @@ void Renderer::trailDraw(RenderList& rl, fx scrollX, uint16_t color) const {
     }
 }
 
-void Renderer::addShip(RenderList &rl, const Vec3fx &pos, uint16_t color, fx shipY, fx shipVy) const
-{
-    // Size is about half a cell wide.
+void SceneBuilder::addShip(RenderList &rl, const Camera& cam, const Vec3fx &pos,
+                       uint16_t color, fx shipY, fx shipVy) const {
     const fx halfW = fi(kCellSize/4);
     const fx len   = fi(kCellSize) * fx::fromRatio(9, 20);
     const fx hz    = fi(kCellSize) * fx::fromRatio(3, 50);
 
-    // Local triangle in XY, pointing straight ahead (+X) when angle = 0.
-    Vec3fx v0{  len,  fx::zero(), fx::zero() };       // tip
-    Vec3fx v1{ -len,  halfW,      fx::zero() };       // base top
-    Vec3fx v2{ -len, -halfW,      fx::zero() };       // base bottom
+    Vec3fx v0{  len,  fx::zero(), fx::zero() };
+    Vec3fx v1{ -len,  halfW,      fx::zero() };
+    Vec3fx v2{ -len, -halfW,      fx::zero() };
 
-    // Clipping zone is within half-width of the playfield boundary.
     const fx playHalf = playHalfH();
     const fx clipZoneStart = playHalf - halfW;
     const fx absY = abs(shipY);
     const bool clipping = (absY > clipZoneStart);
 
-    // Tilt angle points up/down only when not clipping.
     fx c = fx::one();
     fx s = fx::zero();
 
     if (!clipping) {
-        constexpr fx cos45 = fx::fromRaw(46341); // ~0.7071 in Q16.16
+        constexpr fx cos45 = fx::fromRaw(46341);
         c = cos45;
         if (shipVy.raw() > 0) {
             s = cos45;
@@ -290,7 +266,6 @@ void Renderer::addShip(RenderList &rl, const Vec3fx &pos, uint16_t color, fx shi
     }
 
     auto rotZ = [&](Vec3fx& p) {
-        // Rotate in XY plane around Z: (x',y') = (x*c - y*s, x*s + y*c)
         fx x = p.x;
         fx y = p.y;
         p.x = x * c - y * s;
@@ -299,13 +274,11 @@ void Renderer::addShip(RenderList &rl, const Vec3fx &pos, uint16_t color, fx shi
 
     rotZ(v0); rotZ(v1); rotZ(v2);
 
-    // Extrude in Z.
     Vec3fx a0{ v0.x, v0.y, v0.z - hz }, a1{ v1.x, v1.y, v1.z - hz }, a2{ v2.x, v2.y, v2.z - hz };
     Vec3fx b0{ v0.x, v0.y, v0.z + hz }, b1{ v1.x, v1.y, v1.z + hz }, b2{ v2.x, v2.y, v2.z + hz };
 
     auto add = [&](const Vec3fx& p) { return Vec3fx{ pos.x + p.x, pos.y + p.y, pos.z + p.z }; };
 
-    // Wireframe edges.
     line3(add(a0), add(a1), color, cam, rl);
     line3(add(a1), add(a2), color, cam, rl);
     line3(add(a2), add(a0), color, cam, rl);
@@ -319,8 +292,7 @@ void Renderer::addShip(RenderList &rl, const Vec3fx &pos, uint16_t color, fx shi
     line3(add(a2), add(b2), color, cam, rl);
 }
 
-void Renderer::addCube(RenderList &rl, const Vec3fx &pos, uint16_t color) const
-{
+void SceneBuilder::addCube(RenderList &rl, const Camera& cam, const Vec3fx &pos, uint16_t color) const {
     const Vec3fx verts[] = {
         { fx::zero(),    fx::zero(),    fx::zero()    }, { fi(kCellSize), fx::zero(),    fx::zero()    },
         { fi(kCellSize), fi(kCellSize), fx::zero()    }, { fx::zero(),    fi(kCellSize), fx::zero()    },
@@ -341,20 +313,19 @@ void Renderer::addCube(RenderList &rl, const Vec3fx &pos, uint16_t color) const
     }
 }
 
-void Renderer::addSquarePyramid(RenderList& rl, const Vec3fx& pos, uint16_t color,
-                                ModId mod, fx apexScale, const Vec3fx& origin) const
-{
+void SceneBuilder::addSquarePyramid(RenderList& rl, const Camera& cam, const Vec3fx& pos, uint16_t color,
+                                ModId mod, fx apexScale, const Vec3fx& origin) const {
     const Vec3fx verts[] = {
-        { fi(kCellSize/2), apexScale*fi(kCellSize), fi(kCellSize/2) }, // apex
-        { fx::zero(),      fx::zero(),              fi(kCellSize)   }, // base corner 0
-        { fi(kCellSize),   fx::zero(),              fi(kCellSize)   }, // base corner 1
-        { fi(kCellSize),   fx::zero(),              fx::zero()      }, // base corner 2
-        { fx::zero(),      fx::zero(),              fx::zero()      }  // base corner 3
+        { fi(kCellSize/2), apexScale*fi(kCellSize), fi(kCellSize/2) },
+        { fx::zero(),      fx::zero(),              fi(kCellSize)   },
+        { fi(kCellSize),   fx::zero(),              fi(kCellSize)   },
+        { fi(kCellSize),   fx::zero(),              fx::zero()      },
+        { fx::zero(),      fx::zero(),              fx::zero()      }
     };
 
     const int indices[] = {
-        0,1, 0,2, 0,3, 0,4, // sides
-        1,2, 2,3, 3,4, 4,1  // base
+        0,1, 0,2, 0,3, 0,4,
+        1,2, 2,3, 3,4, 4,1
     };
 
     for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
@@ -368,23 +339,21 @@ void Renderer::addSquarePyramid(RenderList& rl, const Vec3fx& pos, uint16_t colo
     }
 }
 
-void Renderer::addRightTriPrism(RenderList& rl, const Vec3fx& pos, uint16_t color,
-                               ModId mod, const Vec3fx& origin) const
-{
-    // Right triangle prism with right angle at bottom-right.
+void SceneBuilder::addRightTriPrism(RenderList& rl, const Camera& cam, const Vec3fx& pos, uint16_t color,
+                                ModId mod, const Vec3fx& origin) const {
     const Vec3fx verts[] = {
-        { fi(kCellSize), fi(kCellSize), fx::zero()    }, // front-right-top
-        { fi(kCellSize), fx::zero(),    fx::zero()    }, // front-right-bottom
-        { fx::zero(),    fx::zero(),    fx::zero()    }, // front-left-bottom
-        { fi(kCellSize), fi(kCellSize), fi(kCellSize) }, // back-right-top
-        { fi(kCellSize), fx::zero(),    fi(kCellSize) }, // back-right-bottom
-        { fx::zero(),    fx::zero(),    fi(kCellSize) }  // back-left-bottom
+        { fi(kCellSize), fi(kCellSize), fx::zero()    },
+        { fi(kCellSize), fx::zero(),    fx::zero()    },
+        { fx::zero(),    fx::zero(),    fx::zero()    },
+        { fi(kCellSize), fi(kCellSize), fi(kCellSize) },
+        { fi(kCellSize), fx::zero(),    fi(kCellSize) },
+        { fx::zero(),    fx::zero(),    fi(kCellSize) }
     };
 
     const int indices[] = {
-        0,1, 1,2, 2,0, // front face
-        3,4, 4,5, 5,3, // back face
-        0,3, 1,4, 2,5  // connecting edges
+        0,1, 1,2, 2,0,
+        3,4, 4,5, 5,3,
+        0,3, 1,4, 2,5
     };
 
     for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
@@ -398,30 +367,29 @@ void Renderer::addRightTriPrism(RenderList& rl, const Vec3fx& pos, uint16_t colo
     }
 }
 
-void Renderer::addText(RenderList& rl, const Text& text, int16_t x, int16_t y,
+void SceneBuilder::addText(RenderList& rl, const Text& text, int16_t x, int16_t y,
                        uint16_t color, uint8_t alpha, bool inverted,
-                       uint16_t bgColor565, uint8_t styleFlags) const
-{
+                       uint16_t bgColor565, uint8_t styleFlags) const {
     if (!text.empty()) {
         rl.addText(&text, x, y, color, alpha, inverted, bgColor565, styleFlags);
     }
 }
 
-void Renderer::drawExplosion(RenderList& rl, uint16_t color) const {
-    if (!explosionActive_) return;
+void SceneBuilder::drawExplosion(RenderList& rl, const Camera& cam,
+                             const ExplosionState& explosion, uint16_t color) const {
+    if (!explosion.active) return;
 
-    static constexpr fx kBurstTime = fx::fromRatio(3, 20); // 0.15 s
-    const fx age = explosionAge_;
+    static constexpr fx kBurstTime = fx::fromRatio(3, 20);
+    const fx age = explosion.age;
 
-    for (int i = 0; i < kExplosionChunkCount; ++i) {
-        const ExplosionChunk& ch = explosion_[i];
+    for (int i = 0; i < ExplosionState::CHUNK_COUNT; ++i) {
+        const ExplosionChunk& ch = explosion.chunks[i];
         const Vec3fx pos{
             ch.origin.x + ch.vel.x * age,
             ch.origin.y + ch.vel.y * age,
             ch.origin.z + ch.vel.z * age
         };
 
-        // Brief burst streak from the ship position outward.
         if (age < kBurstTime) {
             const fx burstScale = fx::fromInt(2);
             const fx t = age * burstScale;
@@ -459,13 +427,18 @@ static inline void rectWireXZ(
     line3(p01, p00, color, cam, rl);
 }
 
-void Renderer::buildScene(RenderList& rl, const Game& game, fx scrollX) const
-{
-    const uint16_t kWire   = 0xFFFF; // white
-    const uint16_t kGreen  = 0x07E0; // green
-    const uint16_t kShip   = 0xFFFF; // white
-    const uint16_t kCyan   = 0x07FF; // cyan
-    const uint16_t kPurple = 0xF81F; // bright purple
+void SceneBuilder::buildScene(RenderList& rl,
+                          const Camera& cam,
+                          const Game& game,
+                          fx scrollX,
+                          TrailState& trail,
+                          const ExplosionState& explosion,
+                          const PortalRayState& portalRays) const {
+    const uint16_t kWire   = 0xFFFF;
+    const uint16_t kGreen  = 0x07E0;
+    const uint16_t kShip   = 0xFFFF;
+    const uint16_t kCyan   = 0x07FF;
+    const uint16_t kPurple = 0xF81F;
 
     if (!game.hasLevel()) return;
 
@@ -480,7 +453,6 @@ void Renderer::buildScene(RenderList& rl, const Game& game, fx scrollX) const
     int col1 = col0 + kColsVisible;
     if (col1 > levelW) col1 = levelW;
 
-    // ---- Bounds planes (top/bottom of playfield) ----
     const fx z0 = fx::zero();
     const fx z1 = fi(kCellSize);
     const fx yTop = playCenterY() + playHalfH();
@@ -492,7 +464,6 @@ void Renderer::buildScene(RenderList& rl, const Game& game, fx scrollX) const
     rectWireXZ(rl, cam, xLeft, xRight, yTop, z0, z1, kWire);
     rectWireXZ(rl, cam, xLeft, xRight, yBot, z0, z1, kWire);
 
-    // ---- Stream + render level ----
     Column56 col{};
     for (int cx = col0; cx < col1; ++cx) {
         if (!game.readLevelColumn((uint16_t)cx, col))
@@ -509,25 +480,24 @@ void Renderer::buildScene(RenderList& rl, const Game& game, fx scrollX) const
             fx worldY = worldYForRow(row);
             fx cz = fx::zero();
 
-            // Modifier origin uses per-cell center.
             fx ox = worldX + fi(kCellSize/2);
             fx oy = worldY + fi(kCellSize/2);
 
             switch (sid) {
                 case ShapeId::Square:
-                    addCube(rl, {worldX, worldY, cz}, kGreen);
+                    addCube(rl, cam, {worldX, worldY, cz}, kGreen);
                     break;
 
                 case ShapeId::RightTri:
-                    addRightTriPrism(rl, {worldX, worldY, cz}, kGreen, mid, {ox, oy, cz});
+                    addRightTriPrism(rl, cam, {worldX, worldY, cz}, kGreen, mid, {ox, oy, cz});
                     break;
 
                 case ShapeId::HalfSpike:
-                    addSquarePyramid(rl, {worldX, worldY, cz}, kGreen, mid, fx::half(), {ox, oy, cz});
+                    addSquarePyramid(rl, cam, {worldX, worldY, cz}, kGreen, mid, fx::half(), {ox, oy, cz});
                     break;
 
                 case ShapeId::FullSpike:
-                    addSquarePyramid(rl, {worldX, worldY, cz}, kGreen, mid, fx::one(), {ox, oy, cz});
+                    addSquarePyramid(rl, cam, {worldX, worldY, cz}, kGreen, mid, fx::one(), {ox, oy, cz});
                     break;
 
                 default:
@@ -536,13 +506,11 @@ void Renderer::buildScene(RenderList& rl, const Game& game, fx scrollX) const
         }
     }
 
-    // ---- Portal marker cubes ----
     const LevelHeaderV1& h = game.levelHeader();
     const int portalCol = portal_abs_x(h);
     const int py = (int)h.portalY;
 
     if (portalCol >= col0 && portalCol < col1) {
-        updatePortalRays(dtCache_);
         const fx px = worldXForColumn(portalCol, scrollX);
         const fx cz = fx::zero();
 
@@ -552,31 +520,27 @@ void Renderer::buildScene(RenderList& rl, const Game& game, fx scrollX) const
             if (row > (kLevelHeight - 1)) row = (kLevelHeight - 1);
 
             const fx pyWorld = worldYForRow(row);
-            addCube(rl, {px, pyWorld, cz}, kPurple);
+            addCube(rl, cam, {px, pyWorld, cz}, kPurple);
         }
-        drawPortalRays(rl, game, scrollX, kWire);
+        drawPortalRays(rl, cam, game, scrollX, portalRays, kWire);
     }
 
-        // ---- Ship / explosion + trail ----
     const Vec3fx shipPos{ game.shipRenderX(), game.ship().y, fi(kCellSize/2) };
 
     if (game.state() != RunState::Dead) {
-        // Trail is drawn first so the ship sits on top.
-        trailDraw(rl, scrollX, kCyan);
+        trailDraw(rl, cam, trail, scrollX, kCyan);
 
-        // Trail samples are stored in level-space so they drift left as scrollX advances.
-        // Ship level-space X is scrollX plus any fly-out offset.
         const fx shipLevelX = scrollX + (game.shipRenderX() - fx::fromInt(kShipFixedX));
-        trailPushLevelPoint(shipLevelX, game.ship().y, fi(kCellSize/2));
+        trailPushLevelPoint(trail, cam, shipLevelX, game.ship().y, fi(kCellSize/2));
 
-        addShip(rl, shipPos, kShip, game.ship().y, game.ship().vy);
+        addShip(rl, cam, shipPos, kShip, game.ship().y, game.ship().vy);
     } else {
-        drawExplosion(rl, kShip);
+        drawExplosion(rl, cam, explosion, kShip);
     }
 }
 
-void Renderer::buildHud(RenderList& rl, const Game& game) const {
-    static constexpr uint16_t kHud = 0xFFFF; // white
+void SceneBuilder::buildHud(RenderList& rl, const Game& game, int screenW, int screenH) const {
+    static constexpr uint16_t kHud = 0xFFFF;
 
     const Hud& hud = game.hud();
 
@@ -584,14 +548,14 @@ void Renderer::buildHud(RenderList& rl, const Game& game) const {
 
     const int levelW = hud.levelLabel().width();
     if (levelW > 0) {
-        addText(rl, hud.levelLabel(), int16_t((320 - levelW) / 2), 4, kHud);
+        addText(rl, hud.levelLabel(), int16_t((screenW - levelW) / 2), 4, kHud);
     }
 
     const int progressW = hud.progress().width();
 
     static constexpr int kBarW = 64;
     static constexpr int kBarH = 8;
-    const int barX = 320 - 4 - progressW - 6 - kBarW;
+    const int barX = screenW - 4 - progressW - 6 - kBarW;
     const int barY = 4;
 
     const int pct = game.progressPercent();
@@ -615,41 +579,15 @@ void Renderer::buildHud(RenderList& rl, const Game& game) const {
     }
 
     if (progressW > 0) {
-        addText(rl, hud.progress(), int16_t(320 - 4 - progressW), 4, kHud);
+        addText(rl, hud.progress(), int16_t(screenW - 4 - progressW), 4, kHud);
     }
 
     if (hud.eventVisible()) {
         const uint16_t eventColor = hud.eventColor();
         if (eventColor != 0) {
-            addText(rl, hud.eventText(), 4, int16_t(320 - 12), eventColor);
+            addText(rl, hud.eventText(), 4, int16_t(screenH - 12), eventColor);
         }
     }
-}
-
-void Renderer::buildStatusOverlay(RenderList& rl, const StatusOverlay& overlay) const {
-    if (!overlay.visible()) return;
-
-    static constexpr uint16_t kPanelBg    = 0x0000; // black
-    static constexpr uint16_t kPanelBorder= 0xFFFF; // white
-    static constexpr uint16_t kFooter     = 0x8410; // gray
-
-    static Text footerText{ "F1 to hide" };
-
-    const auto& lines = overlay.lines();
-    if (lines.empty()) return;
-
-    static constexpr int lineStep = 10;
-    const int panelX = 8;
-    const int panelH = int(lines.size()) * lineStep + 8 + lineStep;
-
-    int y = 320 - panelH - lineStep - 8;
-    for (const auto& line : lines) {
-        addText(rl, line.text, (int16_t)(panelX), (int16_t)y, line.color565, 255, false, 0, TextStyle::Background );
-        y += lineStep;
-    }
-
-    y += (lineStep + 8);
-    addText(rl, footerText, (int16_t)(panelX), (int16_t)y, kFooter, 255, false, 0, TextStyle::Background);
 }
 
 } // namespace gv

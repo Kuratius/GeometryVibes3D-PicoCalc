@@ -4,7 +4,7 @@
 #include "platform/IDisplay.hpp"
 #include "game/InputState.hpp"
 #include "render/Text.hpp"
-#include "render/Fixed.hpp"
+#include "core/Fixed.hpp"
 #include <array>
 #include <cstdint>
 
@@ -21,9 +21,9 @@ public:
     bool accepted() const { return accepted_; }
 
 private:
-    static constexpr int W = 320;
-    static constexpr int H = 320;
-    static constexpr int SLAB_ROWS = 16;
+    static constexpr int kAssetW = 320;
+    static constexpr int kAssetH = 320;
+    static constexpr int kSlabRows = 16;
 
     static constexpr int kFps = 30;
     static constexpr int kPeriodSeconds = 4;
@@ -41,7 +41,7 @@ private:
 
     Text prompt_{ "Press [SPACE]" };
 
-    std::array<uint16_t, W * SLAB_ROWS> slab_{};
+    std::array<uint16_t, kAssetW * kSlabRows> slab_{};
     std::array<uint8_t, kFramesPerPeriod> alphaLut_{};
     int phaseFrame_ = 0;
 };

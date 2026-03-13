@@ -21,31 +21,26 @@ static inline uint16_t blend565(uint16_t dst, uint16_t src, uint8_t a) {
 }
 
 fx TitleScreen::easeInOutCubic(fx t) {
-    // t in [0..1]
     const fx half = fx::half();
 
     if (t < half) {
-        // 4*t^3
         const fx t2 = t * t;
         const fx t3 = t2 * t;
         return fx::fromInt(4) * t3;
     }
 
-    // 1 - pow(-2t + 2, 3)/2
     const fx two = fx::fromInt(2);
-    const fx v = two - two * t;      // v in (0..1]
+    const fx v = two - two * t;
     const fx v2 = v * v;
     const fx v3 = v2 * v;
     return fx::one() - (v3 / two);
 }
 
 void TitleScreen::buildAlphaLut() {
-    // Build a 0..1..0 ping-pong through easeInOutCubic over the full period.
     for (int i = 0; i < kFramesPerPeriod; ++i) {
-        const fx p = fx::fromRatio(i, kFramesPerPeriod - 1); // 0..1
-        fx u = p + p; // 0..2
+        const fx p = fx::fromRatio(i, kFramesPerPeriod - 1);
+        fx u = p + p;
 
-        // Triangle wave 0..1..0
         if (u > fx::one()) {
             u = fx::fromInt(2) - u;
         }
@@ -85,6 +80,7 @@ void TitleScreen::unload() {
 
 void TitleScreen::update(const InputState& in) {
     if (!ready()) return;
+
     if (in.thrustPressed || in.confirm) {
         accepted_ = true;
     }
@@ -93,26 +89,29 @@ void TitleScreen::update(const InputState& in) {
 void TitleScreen::draw(IDisplay& display) {
     if (!ready()) return;
 
-    // Draw full title image once.
+    const int displayW = display.width();
+    const int displayH = display.height();
+
+    // This title asset is currently authored as a raw 320x320 RGB565 image.
+    // We draw it 1:1 at the top-left.
     if (!drawnFull_) {
         if (!file_->seek(0)) return;
 
-        for (int y = 0; y < H; y += SLAB_ROWS) {
-            const int rows = ((y + SLAB_ROWS) <= H) ? SLAB_ROWS : (H - y);
-            const size_t bytesToRead = size_t(W * rows * sizeof(uint16_t));
+        for (int y = 0; y < kAssetH; y += kSlabRows) {
+            const int rows = ((y + kSlabRows) <= kAssetH) ? kSlabRows : (kAssetH - y);
+            const size_t bytesToRead = size_t(kAssetW * rows * sizeof(uint16_t));
 
             size_t got = 0;
             if (!file_->read(slab_.data(), bytesToRead, got) || got != bytesToRead) {
                 return;
             }
 
-            display.drawBitmap565(0, y, W, rows, slab_.data());
+            display.drawBitmap565(0, y, kAssetW, rows, slab_.data());
         }
 
         drawnFull_ = true;
     }
 
-    // Pulse alpha (easeInOutCubic over 4s @ 30fps => 120 frames).
     const uint8_t alpha = alphaLut_[phaseFrame_];
     ++phaseFrame_;
     if (phaseFrame_ >= kFramesPerPeriod) phaseFrame_ = 0;
@@ -121,17 +120,16 @@ void TitleScreen::draw(IDisplay& display) {
     const int promptH = prompt_.height();
     if (promptW <= 0 || promptH <= 0) return;
 
-    int x0 = (display.width() - promptW) / 2;
-    int y0 = display.height() - 24; // center-bottom-ish with margin
+    int x0 = (displayW - promptW) / 2;
+    int y0 = displayH - 24;
 
     if (x0 < 0) x0 = 0;
-    if (x0 > (W - promptW)) x0 = W - promptW;
+    if (x0 > (kAssetW - promptW)) x0 = kAssetW - promptW;
     if (y0 < 0) y0 = 0;
-    if (y0 > (H - promptH)) y0 = H - promptH;
+    if (y0 > (kAssetH - promptH)) y0 = kAssetH - promptH;
 
-    // Read the background strip (full width, promptH rows) from the title image.
-    const size_t stripOffset = size_t(y0) * size_t(W) * sizeof(uint16_t);
-    const size_t stripBytes  = size_t(W * promptH * sizeof(uint16_t));
+    const size_t stripOffset = size_t(y0) * size_t(kAssetW) * sizeof(uint16_t);
+    const size_t stripBytes  = size_t(kAssetW * promptH * sizeof(uint16_t));
 
     if (!file_->seek(stripOffset)) return;
 
@@ -140,10 +138,9 @@ void TitleScreen::draw(IDisplay& display) {
         return;
     }
 
-    // Blend prompt text over the strip.
-    const uint16_t fg = 0xFFFF; // white
+    const uint16_t fg = 0xFFFF;
     for (int row = 0; row < promptH; ++row) {
-        uint16_t* dstRow = slab_.data() + row * W;
+        uint16_t* dstRow = slab_.data() + row * kAssetW;
         for (int col = 0; col < promptW; ++col) {
             if (prompt_.testPixel(col, row)) {
                 const int x = x0 + col;
@@ -152,8 +149,7 @@ void TitleScreen::draw(IDisplay& display) {
         }
     }
 
-    // Blit the updated strip back to the display.
-    display.drawBitmap565(0, y0, W, promptH, slab_.data());
+    display.drawBitmap565(0, y0, kAssetW, promptH, slab_.data());
 }
 
 } // namespace gv

@@ -1,5 +1,5 @@
 #pragma once
-#include "render/Fixed.hpp"
+#include "core/Fixed.hpp"
 
 namespace gv {
 
@@ -19,7 +19,7 @@ constexpr fx kFlyOutCells      = fx::fromInt(16 * kCellSize);
 // We use this to vertically follow the ship without changing pitch.
 constexpr fx kCameraFollow     = fx::fromRatio(3, 20); // 0.15
 
-// ---- Renderer tuning ----
+// ---- SceneBuilder tuning ----
 constexpr int kColsVisible     = 26;
 constexpr int kColsPadLeft     = 8;
 constexpr int kColsPadCells    = 2;   // pad visible X span by this many cells.

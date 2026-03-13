@@ -1,5 +1,5 @@
 #pragma once
-#include "render/Math.hpp"
+#include "core/Math.hpp"
 #include "game/Level.hpp"
 
 namespace gv {

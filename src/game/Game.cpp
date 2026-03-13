@@ -1,5 +1,5 @@
 #include "Game.hpp"
-#include "game/Config.hpp"
+#include "core/Config.hpp"
 #include "game/Playfield.hpp"
 #include "game/LevelMath.hpp"
 #include <string>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render/Text.hpp"
-#include "render/Fixed.hpp"
+#include "core/Fixed.hpp"
 #include <cstdint>
 
 namespace gv {

@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include "Math.hpp"
+#include "core/Math.hpp"
 
 namespace gv {
 

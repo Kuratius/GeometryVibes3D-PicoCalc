@@ -1,6 +1,6 @@
 #pragma once
-#include "game/Config.hpp"
-#include "render/Fixed.hpp"
+#include "core/Config.hpp"
+#include "core/Fixed.hpp"
 
 namespace gv {
 
@@ -15,7 +15,7 @@ static inline constexpr fx playHalfH() {
 
 static inline constexpr fx cellSizeFx() { return fx::fromInt(kCellSize); }
 
-// Renderer cell origin mapping (matches current buildScene):
+// SceneBuilder cell origin mapping (matches current buildScene):
 //   worldY(cell origin at row) = center + halfH - cellH - row*cellH
 static inline fx worldYForRow(int row) {
     const fx cellH = cellSizeFx();

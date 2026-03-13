@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include "render/Fixed.hpp"
+#include "core/Fixed.hpp"
 #include "game/Level.hpp"
 #include "game/InputState.hpp"
 #include "platform/IFileSystem.hpp"

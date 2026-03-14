@@ -2,7 +2,7 @@
 
 A faithful RP2040 port of **Geometry Vibes 3D**, targeting the **ClockworkPi PicoCalc**.
 
-Current state: playable wireframe “fake 3D” implementation with a level-select menu (5 levels), HUD, portal/ship effects, and stable fixed-rate rendering on the ILI9488.
+Current state: playable wireframe “fake 3D” implementation with a level-select menu (7 levels), HUD, portal/ship effects, and stable fixed-rate rendering on the ILI9488.
 
 ## Features
 

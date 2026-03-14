@@ -7,7 +7,7 @@ Current state: playable wireframe “fake 3D” implementation with a level-sele
 ## Features
 
 - **Fixed-point 3D** camera + projection (no frame-time floats required)
-- **Streaming level playback** using the **GVL1 / 56-bit column format**
+- **Streaming level playback** using the **GVL2 / 56-bit column format**
 - **Level-select menu** with highlighted selection
 - **HUD layer** with:
   - controls hint

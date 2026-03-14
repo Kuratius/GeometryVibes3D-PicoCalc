@@ -187,7 +187,7 @@ void Game::update(const InputState& in, fx dt) {
     }
 
     // ---- running ----
-    const fx speedY = fx::fromInt(80);
+    const fx speedY =  kScrollSpeed;
     shipState.vy = in.thrust ? speedY : -speedY;
     shipState.y = shipState.y + shipState.vy * dt;
 

@@ -36,7 +36,7 @@ private:
 
     static constexpr int NUM_SLABS = (H + SLAB_ROWS - 1) / SLAB_ROWS;
 
-    static constexpr int MAX_LINES           = 2048;
+    static constexpr int MAX_LINES           = 3144;
     static constexpr int MAX_LINE_BINNED     = 8192;
     static constexpr int MAX_FILLRECTS       = 128;
     static constexpr int MAX_FILLRECT_BINNED = 512;

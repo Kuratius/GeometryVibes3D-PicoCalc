@@ -64,7 +64,8 @@ private:
         { "Level 2", "levels/L02.BIN" },
         { "Level 3", "levels/L03.BIN" },
         { "Level 4", "levels/L04.BIN" },
-        { "Level 5", "levels/L05.BIN" }
+        { "Level 5", "levels/L05.BIN" },
+        { "Level 6", "levels/L06.BIN" }
     };
     static constexpr std::size_t kLevelCount = sizeof(kLevels) / sizeof(kLevels[0]);
 

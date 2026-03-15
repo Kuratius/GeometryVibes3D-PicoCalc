@@ -80,11 +80,21 @@ private:
                  uint16_t color) const;
 
     void addSquarePyramid(RenderList& rl, const Camera& cam, const Vec3fx& pos,
-                          uint16_t color, ModId mod, fx apexScale,
+                          uint16_t color, ShapeMod mod, fx apexScale,
                           const Vec3fx& origin) const;
 
     void addRightTriPrism(RenderList& rl, const Camera& cam, const Vec3fx& pos,
-                          uint16_t color, ModId mod, const Vec3fx& origin) const;
+                          uint16_t color, ShapeMod mod, const Vec3fx& origin) const;
+
+    void addAnimatedPrimitive(RenderList& rl,
+                              const Camera& cam,
+                              ObstacleId sid,
+                              ShapeMod mod,
+                              const Vec3fx& primitiveCenter,
+                              const Vec3fx& groupPivot,
+                              fx groupCos,
+                              fx groupSin,
+                              uint16_t color) const;
 
     void addText(RenderList& rl, const Text& text, int16_t x, int16_t y,
                  uint16_t color, uint8_t alpha = 255, bool inverted = false,

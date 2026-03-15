@@ -2,24 +2,39 @@
 
 A faithful RP2040 port of **Geometry Vibes 3D**, targeting the **ClockworkPi PicoCalc**.
 
-Current state: playable wireframe “fake 3D” implementation with a level-select menu (7 levels), HUD, portal/ship effects, and stable fixed-rate rendering on the ILI9488.
+Current state: playable wireframe “fake 3D” implementation with a state-driven app flow, level progression, animated obstacle groups, in-game collision against animated geometry, and stable fixed-rate rendering on the ILI9488.
 
 ## Features
 
-- **Fixed-point 3D** camera + projection (no frame-time floats required)
+- **Fixed-point 3D** camera + projection
+- **State-machine app flow**
+  - title screen
+  - level select
+  - gameplay
 - **Streaming level playback** using the **GVL2 / 56-bit column format**
-- **Level-select menu** with highlighted selection
+- **Level-select menu**
+  - highlighted selection
+  - locked/unlocked level progression
 - **HUD layer** with:
   - controls hint
   - level label
   - progress bar + percentage
-  - fading file-load event text
+  - fading event text
 - **Ship controls** with 45° up/down travel like the original
-- **Collision detection** against level geometry, including **rotation/inversion modifiers**
+- **Collision detection** against:
+  - static level geometry
+  - rotation / inversion modifiers
+  - animated obstacle groups
 - **Wireframe effects**, including:
   - animated portal rays
   - ship trail
   - ship explosion chunks
+- **Animated obstacle groups**
+  - grouped primitive definitions stored in the level file
+  - per-group pivot
+  - rotate / hold keyframe steps
+  - half-cell anchor offsets
+  - synced runtime animation playback
 
 ## Hardware / platform highlights
 
@@ -40,15 +55,34 @@ Current state: playable wireframe “fake 3D” implementation with a level-sele
 - Major-axis slab line rasterization for cleaner wireframe output
 - ROM-resident **8×8 bitmap font**
 - Cached screen-space text objects for HUD and menu rendering
+- Scene building and animated-group rendering are driven from level-streamed data
+
+## Level format
+
+The current runtime uses the **GVL2** format:
+
+- 16-byte header
+- optional animated-group definition section
+- packed 56-bit obstacle columns
+- support for:
+  - primitive obstacles
+  - animation-group references
+  - half-cell animation-group anchor offsets
+
+Animated groups are authored as reusable definitions and then referenced from packed level cells.
 
 ## Tools
 
 - **Level editor**: `tools/level_editor/level_editor.py`
-  - tkinter-based 9×N obstacle editor
-  - paint obstacles and modifiers
+  - Tkinter-based 9×N level editor
+  - paint primitive obstacles and modifiers
+  - create named animated obstacle groups from selected primitives
+  - edit group pivot and animation steps
+  - preview placed animated groups in-editor
+  - live animation playback preview
   - locked auto-generated endcap + portal preview
   - rectangle select, copy, cut, paste, and undo
-  - import/export JSON
+  - Open / Save / Save As JSON workflow
   - export packed **GVL2** binary files for the game
 
 - **RGB565 image converter**: `tools/image_convert/convert_rgb565.py`
@@ -76,4 +110,3 @@ Use the `picotool` task or drag the UF2 in **BOOTSEL** mode.
 ![Level 1 late](images/ScreenShot3.png)
 ![Level 1 obstacles](images/ScreenShot4.png)
 ![Title screen](images/ScreenShot5.png)
-

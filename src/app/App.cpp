@@ -9,7 +9,32 @@ static constexpr uint32_t kFrameUs = 33333; // ~30 FPS
 
 } // namespace
 
-const char* App::levelName(std::size_t i) const {
+std::size_t App::unlockedLevelCount() const {
+#ifdef GV3D_TESTING
+    return kLevelCount;
+#else
+    return unlockedLevelCount_;
+#endif
+}
+
+bool App::isLevelUnlocked(std::size_t i) const {
+#ifdef GV3D_TESTING
+    return i < kLevelCount;
+#else
+    return i < unlockedLevelCount_;
+#endif
+}
+
+void App::unlockNextLevel() {
+#ifndef GV3D_TESTING
+    if (unlockedLevelCount_ < kLevelCount) {
+        ++unlockedLevelCount_;
+    }
+#endif
+}
+
+const char *App::levelName(std::size_t i) const
+{
     if (i >= kLevelCount) return "";
     return kLevels[i].name;
 }
@@ -47,6 +72,10 @@ void App::showPlaying() {
 bool App::startLevel(std::size_t levelIndex) {
     if (!plat_) return false;
     if (levelIndex >= kLevelCount) return false;
+    if (!isLevelUnlocked(levelIndex)) {
+        statusOverlay_.addWarning("Level locked");
+        return false;
+    }
 
     game_.reset();
     game_.setFileSystem(&plat_->fs());
@@ -58,6 +87,7 @@ bool App::startLevel(std::size_t levelIndex) {
         return false;
     }
 
+    selectedLevel_ = levelIndex;
     showPlaying();
     return true;
 }
@@ -125,6 +155,7 @@ void App::init(IPlatform& platform) {
 
     statusOverlay_.clear();
     selectedLevel_ = 0;
+    unlockedLevelCount_ = 1;
 
     showTitle();
 }

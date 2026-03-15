@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
+#include <array>
 #include "core/Fixed.hpp"
+#include "core/StaticVector.hpp"
 #include "game/Level.hpp"
 #include "game/InputState.hpp"
 #include "platform/IFileSystem.hpp"
@@ -21,7 +23,18 @@ enum class RunState : uint8_t {
     Dead
 };
 
+struct LoadedAnimGroupDef {
+    AnimGroupDefHeader hdr{};
+    uint16_t firstPrimitive = 0;
+    uint16_t firstStep = 0;
+};
+
 class Game {
+public:
+    static constexpr std::size_t kMaxAnimGroupDefs = 8;
+    static constexpr std::size_t kMaxAnimPrimitives = 64;
+    static constexpr std::size_t kMaxAnimSteps = 128;
+
 public:
     void reset();
 
@@ -57,11 +70,25 @@ public:
     Hud& hud() { return hud_; }
     const Hud& hud() const { return hud_; }
 
+    const StaticVector<LoadedAnimGroupDef, kMaxAnimGroupDefs>& animGroupDefs() const { return animGroupDefs_; }
+    const StaticVector<AnimPrimitiveDef, kMaxAnimPrimitives>& animPrimitives() const { return animPrimitives_; }
+    const StaticVector<AnimStepDef, kMaxAnimSteps>& animSteps() const { return animSteps_; }
+
+    uint32_t animTimeMs() const { return animTimeMs_; }
+    fx animGroupAngleTurns(uint8_t defIndex) const {
+        return (defIndex < animGroupDefs_.size()) ? animGroupAngleTurns_[defIndex] : fx::zero();
+    }
+
 private:
+    bool loadAnimDefs();
+    void clearAnimDefs();
+    void updateAnimCache();
+
     bool checkPortalReached(fx shipY) const;
     bool checkCollisionAt(fx shipY) const;
-    static bool collideCell(ShapeId sid, ModId mid, fx lx, fx ly, fx lz, fx r);
+    static bool collideCell(ObstacleId sid, ShapeMod mid, fx lx, fx ly, fx lz, fx r);
 
+private:
     ShipState shipState{};
     RunState runState = RunState::WaitingToStart;
     RunState resumeState = RunState::WaitingToStart;
@@ -74,6 +101,13 @@ private:
     IFile* file_ = nullptr;
     LevelHeader levelHdr{};
     Hud hud_{};
+
+    StaticVector<LoadedAnimGroupDef, kMaxAnimGroupDefs> animGroupDefs_{};
+    StaticVector<AnimPrimitiveDef, kMaxAnimPrimitives> animPrimitives_{};
+    StaticVector<AnimStepDef, kMaxAnimSteps> animSteps_{};
+
+    uint32_t animTimeMs_ = 0;
+    std::array<fx, kMaxAnimGroupDefs> animGroupAngleTurns_{};
 };
 
 } // namespace gv

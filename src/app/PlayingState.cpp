@@ -83,6 +83,9 @@ void PlayingState::update(App& app, const InputState& in, uint32_t dtUs) {
     }
 
     if (game.finishedScroll()) {
+        if (app.selectedLevel() + 1 == app.unlockedLevelCount()) {
+            app.unlockNextLevel();
+        }
         returnToLevelSelect(app);
         return;
     }

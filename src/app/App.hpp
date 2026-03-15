@@ -12,6 +12,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#define GV3D_TESTING
+
 namespace gv {
 
 class App {
@@ -37,6 +39,9 @@ public:
     int displayHeight() const { return h_; }
 
     std::size_t levelCount() const { return kLevelCount; }
+    std::size_t unlockedLevelCount() const;
+    bool isLevelUnlocked(std::size_t i) const;
+    void unlockNextLevel();
     const char* levelName(std::size_t i) const;
     const char* levelPath(std::size_t i) const;
 
@@ -66,7 +71,8 @@ private:
         { "Level 4", "levels/L04.BIN" },
         { "Level 5", "levels/L05.BIN" },
         { "Level 6", "levels/L06.BIN" },
-        { "Level 7", "levels/L07.BIN" }
+        { "Level 7", "levels/L07.BIN" },
+        { "Level 8", "levels/L08.BIN" }
     };
     static constexpr std::size_t kLevelCount = sizeof(kLevels) / sizeof(kLevels[0]);
 
@@ -85,6 +91,7 @@ private:
     int w_ = 0;
     int h_ = 0;
     std::size_t selectedLevel_ = 0;
+    std::size_t unlockedLevelCount_ = 1;
     
     TitleState titleState_{};
 };

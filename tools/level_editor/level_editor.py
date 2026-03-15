@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import json
+import math
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Any, List
+from dataclasses import dataclass, field
+from typing import Dict, Optional, Tuple, Any, List, Union
 
 # -----------------------------
 # Spec constants
@@ -15,70 +16,85 @@ DEFAULT_W = 332
 CELL = 28
 GRID_LINE = "#2b2b2b"
 
+LEVEL_MAGIC = b"GVL"
+LEVEL_VERSION = 2
+DEFAULT_BACKGROUND_COLOR_565 = 0x0000
+
+MAX_ANIM_GROUPS = 8
+
 # Base shapes
 SHAPE_SQUARE = "square"
 SHAPE_RIGHT_TRI = "right_tri"
 SHAPE_HALF_SPIKE = "half_spike"
 SHAPE_FULL_SPIKE = "full_spike"
+SHAPE_STAR = "star"  # future use
 SHAPES = [SHAPE_SQUARE, SHAPE_RIGHT_TRI, SHAPE_HALF_SPIKE, SHAPE_FULL_SPIKE]
 
 # Modifiers (optional)
 MOD_NONE = "none"
-MOD_ROT_L = "rot_left"   # CCW
-MOD_ROT_R = "rot_right"  # CW
-MOD_INVERT = "invert"    # flip H+V
+MOD_ROT_L = "rot_left"
+MOD_ROT_R = "rot_right"
+MOD_INVERT = "invert"
 MODS = [MOD_NONE, MOD_ROT_L, MOD_ROT_R, MOD_INVERT]
-MOD_SHAPES = {SHAPE_RIGHT_TRI, SHAPE_HALF_SPIKE, SHAPE_FULL_SPIKE}
+MOD_SHAPES = {SHAPE_RIGHT_TRI, SHAPE_HALF_SPIKE, SHAPE_FULL_SPIKE, SHAPE_STAR}
+
+# Editor paint modes
+PAINT_MODE_PRIMITIVE = "primitive"
+PAINT_MODE_ANIM_REF = "anim_ref"
+
+# Anim group offset mods
+AG_OFF_NONE = "none"
+AG_OFF_RIGHT = "shift_right"
+AG_OFF_DOWN = "shift_down"
+AG_OFF_DOWN_RIGHT = "shift_down_right"
+ANIM_GROUP_OFFSET_MODS = [AG_OFF_NONE, AG_OFF_RIGHT, AG_OFF_DOWN, AG_OFF_DOWN_RIGHT]
+
+# Colors
+PRIM_OUTLINE = "#d0d0d0"
+PRIM_FILL = "#0b0b0b"
+ANIM_OUTLINE = "#4fc3f7"
+ANIM_FILL = ""
+ANIM_OWNING_SELECTED = "#ffd54a"
+ANIM_GHOST = "#7fdfff"
 
 # -----------------------------
 # Endcap
-# Stored as dx relative to last column (width-1).
-# Portal is also relative to last column.
 # -----------------------------
 ENDCAP_W = 6
 ENDCAP_OBS = [
-    # y=0
     {"dx": -5, "y": 0, "shape": "right_tri", "mod": "rot_left"},
     {"dx": -4, "y": 0, "shape": "square"},
     {"dx": -3, "y": 0, "shape": "square"},
     {"dx": -2, "y": 0, "shape": "square"},
     {"dx": -1, "y": 0, "shape": "square"},
     {"dx":  0, "y": 0, "shape": "square"},
-    # y=1
     {"dx": -4, "y": 1, "shape": "right_tri", "mod": "rot_left"},
     {"dx": -3, "y": 1, "shape": "square"},
     {"dx": -2, "y": 1, "shape": "square"},
     {"dx": -1, "y": 1, "shape": "square"},
     {"dx":  0, "y": 1, "shape": "square"},
-    # y=2
     {"dx": -3, "y": 2, "shape": "right_tri", "mod": "rot_left"},
     {"dx": -2, "y": 2, "shape": "square"},
     {"dx": -1, "y": 2, "shape": "square"},
     {"dx":  0, "y": 2, "shape": "square"},
-    # y=3
     {"dx": -2, "y": 3, "shape": "square"},
     {"dx": -1, "y": 3, "shape": "square"},
     {"dx":  0, "y": 3, "shape": "square"},
-    # y=4
     {"dx": -2, "y": 4, "shape": "square"},
     {"dx": -1, "y": 4, "shape": "square"},
     {"dx":  0, "y": 4, "shape": "square"},
-    # y=5
     {"dx": -2, "y": 5, "shape": "square"},
     {"dx": -1, "y": 5, "shape": "square"},
     {"dx":  0, "y": 5, "shape": "square"},
-    # y=6
     {"dx": -3, "y": 6, "shape": "right_tri"},
     {"dx": -2, "y": 6, "shape": "square"},
     {"dx": -1, "y": 6, "shape": "square"},
     {"dx":  0, "y": 6, "shape": "square"},
-    # y=7
     {"dx": -4, "y": 7, "shape": "right_tri"},
     {"dx": -3, "y": 7, "shape": "square"},
     {"dx": -2, "y": 7, "shape": "square"},
     {"dx": -1, "y": 7, "shape": "square"},
     {"dx":  0, "y": 7, "shape": "square"},
-    # y=8
     {"dx": -5, "y": 8, "shape": "right_tri"},
     {"dx": -4, "y": 8, "shape": "square"},
     {"dx": -3, "y": 8, "shape": "square"},
@@ -87,16 +103,18 @@ ENDCAP_OBS = [
     {"dx":  0, "y": 8, "shape": "square"},
 ]
 
-# Portal: relative to last column (width-1)
 PORTAL_REL = {"dx": -3, "y": 4}
 
-# --- Binary export mappings (v1) ---
+# -----------------------------
+# Binary mappings
+# -----------------------------
 SHAPE_ID = {
     "empty": 0,
     "square": 1,
     "right_tri": 2,
     "half_spike": 3,
     "full_spike": 4,
+    "star": 5,
 }
 ID_SHAPE = {v: k for k, v in SHAPE_ID.items()}
 
@@ -107,23 +125,30 @@ MOD_ID = {
     "invert": 3,
 }
 
+ANIM_GROUP_OFFSET_ID = {
+    AG_OFF_NONE: 0,
+    AG_OFF_RIGHT: 1,
+    AG_OFF_DOWN: 2,
+    AG_OFF_DOWN_RIGHT: 3,
+}
+
 # -----------------------------
 # Data model
 # -----------------------------
 
 @dataclass(frozen=True)
-class Obstacle:
+class PrimitiveObstacle:
     shape: str
     mod: str = MOD_NONE
 
     def to_obj(self) -> Dict[str, Any]:
-        o = {"shape": self.shape}
+        o = {"type": "primitive", "shape": self.shape}
         if self.mod != MOD_NONE:
             o["mod"] = self.mod
         return o
 
     @staticmethod
-    def from_obj(obj: Dict[str, Any]) -> "Obstacle":
+    def from_obj(obj: Dict[str, Any]) -> "PrimitiveObstacle":
         shape = str(obj.get("shape", SHAPE_SQUARE))
         mod = str(obj.get("mod", MOD_NONE))
         if shape not in SHAPES:
@@ -132,19 +157,132 @@ class Obstacle:
             mod = MOD_NONE
         if shape not in MOD_SHAPES:
             mod = MOD_NONE
-        return Obstacle(shape=shape, mod=mod)
+        return PrimitiveObstacle(shape=shape, mod=mod)
+
+@dataclass(frozen=True)
+class AnimGroupRef:
+    group_index: int
+    offset_mod: str = AG_OFF_NONE
+
+    def to_obj(self) -> Dict[str, Any]:
+        return {
+            "type": "anim_ref",
+            "groupIndex": int(self.group_index),
+            "offsetMod": self.offset_mod,
+        }
+
+    @staticmethod
+    def from_obj(obj: Dict[str, Any]) -> "AnimGroupRef":
+        gi = int(obj.get("groupIndex", 0))
+        gi = max(0, min(MAX_ANIM_GROUPS - 1, gi))
+        off = str(obj.get("offsetMod", AG_OFF_NONE))
+        if off not in ANIM_GROUP_OFFSET_MODS:
+            off = AG_OFF_NONE
+        return AnimGroupRef(group_index=gi, offset_mod=off)
+
+CellValue = Union[PrimitiveObstacle, AnimGroupRef]
+
+@dataclass(frozen=True)
+class AnimPrimitive:
+    hx: int
+    hy: int
+    shape: str
+    mod: str = MOD_NONE
+
+    def to_obj(self) -> Dict[str, Any]:
+        o = {
+            "hx": int(self.hx),
+            "hy": int(self.hy),
+            "shape": self.shape,
+        }
+        if self.mod != MOD_NONE:
+            o["mod"] = self.mod
+        return o
+
+    @staticmethod
+    def from_obj(obj: Dict[str, Any]) -> "AnimPrimitive":
+        shape = str(obj.get("shape", SHAPE_SQUARE))
+        mod = str(obj.get("mod", MOD_NONE))
+        if shape not in SHAPES and shape != SHAPE_STAR:
+            shape = SHAPE_SQUARE
+        if mod not in MODS:
+            mod = MOD_NONE
+        if shape not in MOD_SHAPES:
+            mod = MOD_NONE
+        return AnimPrimitive(
+            hx=int(obj.get("hx", 0)),
+            hy=int(obj.get("hy", 0)),
+            shape=shape,
+            mod=mod,
+        )
+
+@dataclass(frozen=True)
+class AnimStep:
+    kind: str
+    delta_qturns: int = 0
+    duration_ms: int = 250
+
+    def to_obj(self) -> Dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "deltaQTurns": int(self.delta_qturns),
+            "durationMs": int(self.duration_ms),
+        }
+
+    @staticmethod
+    def from_obj(obj: Dict[str, Any]) -> "AnimStep":
+        kind = str(obj.get("kind", "hold"))
+        if kind not in ("rotate", "hold"):
+            kind = "hold"
+        dq = int(obj.get("deltaQTurns", 0))
+        dur = max(1, int(obj.get("durationMs", 250)))
+        if kind == "hold":
+            dq = 0
+        return AnimStep(kind=kind, delta_qturns=dq, duration_ms=dur)
+
+@dataclass
+class AnimDef:
+    name: str
+    pivot_hx: int = 0
+    pivot_hy: int = 0
+    primitives: List[AnimPrimitive] = field(default_factory=list)
+    steps: List[AnimStep] = field(default_factory=list)
+
+    def to_obj(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "pivotHx": int(self.pivot_hx),
+            "pivotHy": int(self.pivot_hy),
+            "primitives": [p.to_obj() for p in self.primitives],
+            "steps": [s.to_obj() for s in self.steps],
+        }
+
+    @staticmethod
+    def from_obj(obj: Dict[str, Any]) -> "AnimDef":
+        name = str(obj.get("name", "Unnamed"))
+        pivx = int(obj.get("pivotHx", 0))
+        pivy = int(obj.get("pivotHy", 0))
+        prims = [AnimPrimitive.from_obj(p) for p in obj.get("primitives", [])]
+        steps = [AnimStep.from_obj(s) for s in obj.get("steps", [])]
+        return AnimDef(name=name, pivot_hx=pivx, pivot_hy=pivy, primitives=prims, steps=steps)
 
 @dataclass
 class Level:
     width: int
     height: int = GRID_H
-    obstacles: Dict[str, Obstacle] = None
+    cells: Dict[str, CellValue] = None
+    background_color_565: int = DEFAULT_BACKGROUND_COLOR_565
+    anim_defs: List[Optional[AnimDef]] = None
 
     def __post_init__(self) -> None:
         if self.height != GRID_H:
             raise ValueError("Height must be 9.")
-        if self.obstacles is None:
-            self.obstacles = {}
+        if self.cells is None:
+            self.cells = {}
+        if self.anim_defs is None:
+            self.anim_defs = [None] * MAX_ANIM_GROUPS
+        elif len(self.anim_defs) != MAX_ANIM_GROUPS:
+            raise ValueError("anim_defs must have length 8.")
 
     def key(self, x: int, y: int) -> str:
         return f"{x},{y}"
@@ -159,47 +297,53 @@ class Level:
         return x >= self.endcap_x0()
 
     def resize_width(self, new_w: int) -> None:
-        """Allow grow or shrink. Shrink clips obstacles beyond new width."""
         new_w = int(new_w)
         if new_w < 1:
             new_w = 1
         self.width = new_w
 
         kill: List[str] = []
-        for k in self.obstacles.keys():
+        for k in self.cells.keys():
             xs, ys = k.split(",")
             x = int(xs)
             if x >= new_w:
                 kill.append(k)
         for k in kill:
-            self.obstacles.pop(k, None)
+            self.cells.pop(k, None)
 
-    def set_obstacle(self, x: int, y: int, obs: Optional[Obstacle]) -> None:
+    def set_cell(self, x: int, y: int, value: Optional[CellValue]) -> None:
         if not self.in_bounds(x, y):
             return
         if self.in_endcap(x):
             return
         k = self.key(x, y)
-        if obs is None:
-            self.obstacles.pop(k, None)
+        if value is None:
+            self.cells.pop(k, None)
         else:
-            self.obstacles[k] = obs
+            self.cells[k] = value
 
-    def get_obstacle(self, x: int, y: int) -> Optional[Obstacle]:
-        return self.obstacles.get(self.key(x, y))
+    def get_cell(self, x: int, y: int) -> Optional[CellValue]:
+        return self.cells.get(self.key(x, y))
 
-    def effective_obstacle_at(self, x: int, y: int):
-        """Return authored obstacle if present; else if in endcap, return endcap obstacle; else None."""
-        obs = self.get_obstacle(x, y)
-        if obs:
-            return obs
+    def get_primitive(self, x: int, y: int) -> Optional[PrimitiveObstacle]:
+        c = self.get_cell(x, y)
+        return c if isinstance(c, PrimitiveObstacle) else None
+
+    def get_anim_ref(self, x: int, y: int) -> Optional[AnimGroupRef]:
+        c = self.get_cell(x, y)
+        return c if isinstance(c, AnimGroupRef) else None
+
+    def effective_cell_at(self, x: int, y: int) -> Optional[CellValue]:
+        cell = self.get_cell(x, y)
+        if cell is not None:
+            return cell
 
         last = self.width - 1
         if x >= self.endcap_x0():
             dx = x - last
             for e in ENDCAP_OBS:
                 if int(e["dx"]) == dx and int(e["y"]) == y:
-                    return Obstacle.from_obj(e)
+                    return PrimitiveObstacle.from_obj(e)
         return None
 
     def clear_cell(self, x: int, y: int) -> None:
@@ -207,21 +351,27 @@ class Level:
             return
         if self.in_endcap(x):
             return
-        self.obstacles.pop(self.key(x, y), None)
+        self.cells.pop(self.key(x, y), None)
 
     def strip_endcap_from_authored(self) -> None:
-        """Remove any obstacles that are in the auto endcap region (keeps authored data clean)."""
         x0 = self.endcap_x0()
         kill = []
-        for k in self.obstacles.keys():
+        for k in self.cells.keys():
             xs, _ = k.split(",")
             if int(xs) >= x0:
                 kill.append(k)
         for k in kill:
-            self.obstacles.pop(k, None)
+            self.cells.pop(k, None)
+
+    def clear_anim_group_refs(self, group_index: int) -> None:
+        kill = []
+        for k, v in self.cells.items():
+            if isinstance(v, AnimGroupRef) and v.group_index == group_index:
+                kill.append(k)
+        for k in kill:
+            self.cells.pop(k, None)
 
     def apply_endcap_to_export_list(self, out_list: List[Dict[str, Any]]) -> None:
-        """Append the fixed endcap obstacles as absolute x,y entries."""
         last = self.width - 1
         for e in ENDCAP_OBS:
             x = last + int(e["dx"])
@@ -236,65 +386,137 @@ class Level:
         last = self.width - 1
         return (last + int(PORTAL_REL["dx"]), int(PORTAL_REL["y"]))
 
+    def used_anim_def_count(self) -> int:
+        last_used = -1
+        for i, a in enumerate(self.anim_defs):
+            if a is not None:
+                last_used = i
+        return last_used + 1
+
+    def anim_def_max_primitive_count(self) -> int:
+        m = 0
+        for a in self.anim_defs:
+            if a is not None:
+                m = max(m, len(a.primitives))
+        return m
+
     def write_bin(self, path: str) -> None:
         self.strip_endcap_from_authored()
 
-        magic = b"GVL2"
-        version = 2
         width = int(self.width)
-        height = int(self.height)
+        portal_dx_signed = int(PORTAL_REL["dx"])
+        background_color_565 = int(self.background_color_565) & 0xFFFF
 
-        portal_dx = int(PORTAL_REL["dx"]) & 0xFF
-        portal_y = int(PORTAL_REL["y"]) & 0xFF
-        endcap_w = int(ENDCAP_W) & 0xFF
+        anim_def_count = self.used_anim_def_count()
+        anim_def_max_primitive_count = self.anim_def_max_primitive_count()
+
+        anim_defs_blob = bytearray()
+        for i in range(anim_def_count):
+            a = self.anim_defs[i]
+            if a is None:
+                prims: List[AnimPrimitive] = []
+                steps: List[AnimStep] = []
+                pivot_hx = 0
+                pivot_hy = 0
+            else:
+                prims = a.primitives
+                steps = a.steps
+                pivot_hx = a.pivot_hx
+                pivot_hy = a.pivot_hy
+
+            total_duration = sum(max(1, s.duration_ms) for s in steps)
+            if total_duration > 0xFFFF:
+                total_duration = 0xFFFF
+
+            anim_defs_blob += bytes([
+                len(prims) & 0xFF,
+                pivot_hx & 0xFF,
+                pivot_hy & 0xFF,
+                len(steps) & 0xFF,
+            ])
+            anim_defs_blob += int(total_duration).to_bytes(2, "little", signed=False)
+
+            for p in prims:
+                shape_id = SHAPE_ID.get(p.shape, 1) & 0x0F
+                mod_id = MOD_ID.get(p.mod, 0) & 0x03
+                anim_defs_blob += int(p.hx).to_bytes(1, "little", signed=True)
+                anim_defs_blob += int(p.hy).to_bytes(1, "little", signed=True)
+                anim_defs_blob += bytes([shape_id, mod_id])
+
+            for s in steps:
+                step_type = 0 if s.kind == "rotate" else 1
+                dq = int(s.delta_qturns)
+                dur = max(1, int(s.duration_ms))
+                anim_defs_blob += bytes([step_type & 0xFF])
+                anim_defs_blob += int(dq).to_bytes(1, "little", signed=True)
+                anim_defs_blob += int(dur).to_bytes(2, "little", signed=False)
+
+        level_data_offset = 16 + len(anim_defs_blob)
 
         header = bytearray()
-        header += magic
-        header += bytes([version])
+        header += LEVEL_MAGIC
+        header += bytes([LEVEL_VERSION])
         header += width.to_bytes(2, "little", signed=False)
-        header += bytes([height & 0xFF])
-        header += int.to_bytes((portal_dx if portal_dx < 128 else portal_dx - 256), 1, "little", signed=True)
-        header += bytes([portal_y])
-        header += bytes([endcap_w])
-        header += b"\x00\x00\x00\x00\x00"  # reserved to 16 bytes
+        header += int.to_bytes(portal_dx_signed, 1, "little", signed=True)
+        header += background_color_565.to_bytes(2, "little", signed=False)
+        header += bytes([anim_def_count & 0xFF])
+        header += bytes([anim_def_max_primitive_count & 0xFF])
+        header += level_data_offset.to_bytes(2, "little", signed=False)
+        header += b"\x00\x00\x00"
+
+        if len(header) != 16:
+            raise ValueError(f"Header length is {len(header)}, expected 16 bytes.")
 
         with open(path, "wb") as f:
             f.write(header)
+            f.write(anim_defs_blob)
 
             for x in range(width):
                 col = 0
                 for y in range(9):
-                    obs = self.effective_obstacle_at(x, y)
-                    if obs is None:
-                        shape_id = 0
+                    cell = self.effective_cell_at(x, y)
+                    if cell is None:
+                        obs_id = 0
                         mod_id = 0
-                    else:
-                        shape_id = SHAPE_ID.get(obs.shape, 0) & 0xF
-                        mod_id = MOD_ID.get(obs.mod, 0) & 0x3
-                        if obs.shape not in MOD_SHAPES:
+                    elif isinstance(cell, PrimitiveObstacle):
+                        obs_id = SHAPE_ID.get(cell.shape, 0) & 0x0F
+                        mod_id = MOD_ID.get(cell.mod, 0) & 0x03
+                        if cell.shape not in MOD_SHAPES:
                             mod_id = 0
+                    elif isinstance(cell, AnimGroupRef):
+                        obs_id = (8 + int(cell.group_index)) & 0x0F
+                        mod_id = ANIM_GROUP_OFFSET_ID.get(cell.offset_mod, 0) & 0x03
+                    else:
+                        obs_id = 0
+                        mod_id = 0
 
-                    cell6 = (shape_id & 0xF) | ((mod_id & 0x3) << 4)
+                    cell6 = (obs_id & 0x0F) | ((mod_id & 0x03) << 4)
                     col |= (cell6 & 0x3F) << (y * 6)
 
                 f.write(int(col).to_bytes(7, "little", signed=False))
 
     def to_json_obj(self) -> Dict[str, Any]:
         authored = []
-        for k, obs in self.obstacles.items():
+        for k, cell in self.cells.items():
             xs, ys = k.split(",")
-            authored.append({"x": int(xs), "y": int(ys), **obs.to_obj()})
-        authored.sort(key=lambda o: (o["y"], o["x"], o["shape"]))
+            authored.append({"x": int(xs), "y": int(ys), **cell.to_obj()})
+        authored.sort(key=lambda o: (o["y"], o["x"], o.get("type", "")))
 
         out_obs = list(authored)
         self.apply_endcap_to_export_list(out_obs)
-        out_obs.sort(key=lambda o: (o["y"], o["x"], o["shape"]))
+        out_obs.sort(key=lambda o: (o["y"], o["x"], o.get("type", ""), o.get("shape", "")))
 
         px, py = self.portal_abs()
         return {
             "width": self.width,
             "height": self.height,
+            "backgroundColor565": self.background_color_565,
+            "cells": authored,
             "obstacles": out_obs,
+            "animations": [
+                a.to_obj() if a is not None else None
+                for a in self.anim_defs
+            ],
             "portal": {"dx": int(PORTAL_REL["dx"]), "y": int(PORTAL_REL["y"]), "x": px},
             "endcap": {"width": ENDCAP_W},
         }
@@ -305,17 +527,35 @@ class Level:
         h = int(obj.get("height", GRID_H))
         if h != GRID_H:
             raise ValueError("Expected height=9.")
-        lvl = Level(width=w, height=h)
 
-        lvl.obstacles.clear()
-        for o in obj.get("obstacles", []):
+        bg = int(obj.get("backgroundColor565", DEFAULT_BACKGROUND_COLOR_565)) & 0xFFFF
+
+        anim_defs_raw = obj.get("animations", [None] * MAX_ANIM_GROUPS)
+        anim_defs: List[Optional[AnimDef]] = [None] * MAX_ANIM_GROUPS
+        for i in range(min(MAX_ANIM_GROUPS, len(anim_defs_raw))):
+            if anim_defs_raw[i] is not None:
+                anim_defs[i] = AnimDef.from_obj(anim_defs_raw[i])
+
+        lvl = Level(width=w, height=h, background_color_565=bg, anim_defs=anim_defs)
+        lvl.cells.clear()
+
+        cells_src = obj.get("cells")
+        if cells_src is None:
+            cells_src = obj.get("obstacles", [])
+
+        for o in cells_src:
             x = int(o.get("x", 0))
             y = int(o.get("y", 0))
             if not lvl.in_bounds(x, y):
                 continue
-            obs = Obstacle.from_obj(o)
-            k = lvl.key(x, y)
-            lvl.obstacles[k] = obs
+
+            typ = str(o.get("type", "primitive"))
+            if typ == "anim_ref":
+                cell: CellValue = AnimGroupRef.from_obj(o)
+            else:
+                cell = PrimitiveObstacle.from_obj(o)
+
+            lvl.cells[lvl.key(x, y)] = cell
 
         lvl.strip_endcap_from_authored()
         return lvl
@@ -326,10 +566,84 @@ class Level:
 
 @dataclass
 class UndoAction:
-    before_cells: Dict[str, Optional[Obstacle]]
-    after_cells: Dict[str, Optional[Obstacle]]
+    before_cells: Dict[str, Optional[CellValue]]
+    after_cells: Dict[str, Optional[CellValue]]
     before_width: int
     after_width: int
+    before_anim_defs: List[Optional[AnimDef]]
+    after_anim_defs: List[Optional[AnimDef]]
+
+# -----------------------------
+# Naming dialog
+# -----------------------------
+
+class NameDialog:
+    def __init__(self, parent: tk.Tk, title: str, prompt: str):
+        self.result: Optional[str] = None
+
+        self.top = tk.Toplevel(parent)
+        self.top.title(title)
+        self.top.transient(parent)
+        self.top.grab_set()
+        self.top.resizable(False, False)
+
+        frm = tk.Frame(self.top, padx=12, pady=12)
+        frm.pack(fill="both", expand=True)
+
+        tk.Label(frm, text=prompt).pack(anchor="w")
+        self.var = tk.StringVar()
+        ent = tk.Entry(frm, textvariable=self.var, width=32)
+        ent.pack(fill="x", pady=(8, 12))
+        ent.focus_set()
+        ent.selection_range(0, "end")
+
+        btns = tk.Frame(frm)
+        btns.pack(fill="x")
+
+        tk.Button(btns, text="OK", width=10, command=self.on_ok).pack(side="left")
+        tk.Button(btns, text="Cancel", width=10, command=self.on_cancel).pack(side="right")
+
+        self.top.bind("<Escape>", lambda e: self.on_cancel())
+        self.top.bind("<Return>", lambda e: self.on_ok())
+        self.top.protocol("WM_DELETE_WINDOW", self.on_cancel)
+
+        parent.wait_window(self.top)
+
+    def on_ok(self) -> None:
+        s = self.var.get().strip()
+        if not s:
+            return
+        self.result = s
+        self.top.destroy()
+
+    def on_cancel(self) -> None:
+        self.result = None
+        self.top.destroy()
+
+# -----------------------------
+# Geometry helpers
+# -----------------------------
+
+def poly_centroid_area(poly: List[Tuple[float, float]]) -> Tuple[float, float, float]:
+    area2 = 0.0
+    cx = 0.0
+    cy = 0.0
+    n = len(poly)
+    for i in range(n):
+        x0, y0 = poly[i]
+        x1, y1 = poly[(i + 1) % n]
+        cross = x0 * y1 - x1 * y0
+        area2 += cross
+        cx += (x0 + x1) * cross
+        cy += (y0 + y1) * cross
+    if abs(area2) < 1e-9:
+        xs = sum(p[0] for p in poly) / max(1, n)
+        ys = sum(p[1] for p in poly) / max(1, n)
+        return xs, ys, 0.0
+    area = area2 / 2.0
+    cx /= (3.0 * area2)
+    cy /= (3.0 * area2)
+    return cx, cy, abs(area)
 
 # -----------------------------
 # Editor
@@ -338,43 +652,83 @@ class UndoAction:
 class EditorApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("GV3D Obstacle Level Editor (9xN)")
 
         self.level = Level(DEFAULT_W)
+        self.current_file_path: Optional[str] = None
+        self.is_dirty = False
 
-        # UI state
         self.width_var = tk.IntVar(value=self.level.width)
+        self.paint_mode_var = tk.StringVar(value=PAINT_MODE_PRIMITIVE)
         self.shape_var = tk.StringVar(value=SHAPE_SQUARE)
         self.mod_var = tk.StringVar(value=MOD_NONE)
+        self.selected_anim_slot: Optional[int] = None
+        self.anim_offset_var = tk.StringVar(value=AG_OFF_NONE)
 
-        # input state
         self._painting = False
         self._erasing = False
 
-        # selection
         self._selecting = False
         self._sel_a: Optional[Tuple[int, int]] = None
         self._sel_b: Optional[Tuple[int, int]] = None
         self._sel_rect_id: Optional[int] = None
 
-        # clipboard
         self._clipboard: Optional[Dict[str, Any]] = None
 
-        # undo
         self._undo: List[UndoAction] = []
         self._txn_active = False
-        self._txn_before_cells: Dict[str, Optional[Obstacle]] = {}
-        self._txn_after_cells: Dict[str, Optional[Obstacle]] = {}
+        self._txn_before_cells: Dict[str, Optional[CellValue]] = {}
+        self._txn_after_cells: Dict[str, Optional[CellValue]] = {}
         self._txn_before_width = self.level.width
+        self._txn_before_anim_defs: List[Optional[AnimDef]] = [None] * MAX_ANIM_GROUPS
 
-        # view state
         self._last_mouse_cell: Tuple[int, int] = (0, 0)
         self._y_offset_px = 0
+
+        self.anim_slot_labels: List[tk.Label] = []
+        self.anim_select_buttons: List[tk.Button] = []
+        self.anim_delete_buttons: List[tk.Button] = []
+
+        self.preview_time_ms = 0
+        self.preview_running = True
+        self._preview_timer_ms = 33  # ~30 FPS
 
         self._build_ui()
         self._rebuild_canvas_region()
         self.redraw_all()
         self._update_modifier_enable()
+        self._refresh_animation_ui()
+        self._schedule_preview_tick()
+        self._update_window_title()
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close_request)
+
+    # -------- Window --------
+
+    def on_close_request(self) -> None:
+        if self.is_dirty:
+            if not messagebox.askyesno("Unsaved Changes", "Discard unsaved changes and quit?"):
+                return
+        self.root.destroy()
+
+    def mark_dirty(self) -> None:
+        if not self.is_dirty:
+            self.is_dirty = True
+            self._update_window_title()
+
+    def clear_dirty(self) -> None:
+        if self.is_dirty:
+            self.is_dirty = False
+            self._update_window_title()
+
+    def _display_name_for_title(self) -> str:
+        if not self.current_file_path:
+            return "Untitled"
+        import os
+        return os.path.basename(self.current_file_path)
+
+    def _update_window_title(self) -> None:
+        star = " *" if self.is_dirty else ""
+        self.root.title(f"GV3D Obstacle Level Editor - {self._display_name_for_title()}{star}")
 
     # -------- UI --------
 
@@ -382,16 +736,28 @@ class EditorApp:
         outer = tk.Frame(self.root)
         outer.pack(fill="both", expand=True)
 
-        left = tk.Frame(outer, padx=8, pady=8)
-        left.pack(side="left", fill="y")
+        # Left side: vertically scrollable controls
+        left_wrap = tk.Frame(outer)
+        left_wrap.pack(side="left", fill="y")
+
+        self.left_canvas = tk.Canvas(left_wrap, width=320, highlightthickness=0)
+        self.left_vbar = tk.Scrollbar(left_wrap, orient="vertical", command=self.left_canvas.yview)
+        self.left_canvas.configure(yscrollcommand=self.left_vbar.set)
+
+        self.left_canvas.pack(side="left", fill="y")
+        self.left_vbar.pack(side="right", fill="y")
+
+        left = tk.Frame(self.left_canvas, padx=8, pady=8)
+        self.left_canvas_window = self.left_canvas.create_window((0, 0), window=left, anchor="nw")
 
         right = tk.Frame(outer)
         right.pack(side="right", fill="both", expand=True)
 
         tk.Label(left, text="File", font=("Segoe UI", 10, "bold")).pack(anchor="w")
         tk.Button(left, text="New (clear)…", command=self.new_level).pack(fill="x", pady=(4, 2))
-        tk.Button(left, text="Import JSON…", command=self.import_json).pack(fill="x", pady=2)
-        tk.Button(left, text="Export JSON…", command=self.export_json).pack(fill="x", pady=2)
+        tk.Button(left, text="Open…", command=self.open_json).pack(fill="x", pady=2)
+        tk.Button(left, text="Save", command=self.save_json).pack(fill="x", pady=2)
+        tk.Button(left, text="Save As…", command=self.save_json_as).pack(fill="x", pady=2)
         tk.Button(left, text="Export BIN…", command=self.export_bin).pack(fill="x", pady=2)
 
         tk.Label(left, text="").pack(pady=6)
@@ -404,10 +770,17 @@ class EditorApp:
                    command=self.on_width_change).pack(side="left", padx=(6, 0))
         tk.Button(wrow, text="Apply", command=self.on_width_change).pack(side="left", padx=6)
 
+        tk.Label(left, text="Mode", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(6, 0))
+        tk.Radiobutton(left, text="Paint primitives", variable=self.paint_mode_var,
+                       value=PAINT_MODE_PRIMITIVE, command=self._refresh_animation_ui).pack(anchor="w")
+        tk.Radiobutton(left, text="Paint animation refs", variable=self.paint_mode_var,
+                       value=PAINT_MODE_ANIM_REF, command=self._refresh_animation_ui).pack(anchor="w")
+
         tk.Label(left, text="").pack(pady=6)
 
         tk.Label(left, text="Obstacle Shape", font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        shape_menu = tk.OptionMenu(left, self.shape_var, *SHAPES, command=lambda _=None: self._update_modifier_enable())
+        shape_menu = tk.OptionMenu(left, self.shape_var, *SHAPES,
+                                   command=lambda _=None: self._update_modifier_enable())
         shape_menu.pack(fill="x", pady=(4, 4))
 
         tk.Label(left, text="Modifier", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(10, 0))
@@ -416,6 +789,103 @@ class EditorApp:
             rb = tk.Radiobutton(left, text=m, variable=self.mod_var, value=m)
             rb.pack(anchor="w")
             self.mod_buttons.append(rb)
+
+        tk.Label(left, text="").pack(pady=6)
+
+        tk.Label(left, text="Animations", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        self.new_anim_btn = tk.Button(left, text="New", command=self.new_animation_from_selection)
+        self.new_anim_btn.pack(fill="x", pady=(4, 4))
+
+        tk.Label(left, text="Anim Ref Offset", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(4, 0))
+        for off, label in [
+            (AG_OFF_NONE, "None"),
+            (AG_OFF_RIGHT, "Shift right"),
+            (AG_OFF_DOWN, "Shift down"),
+            (AG_OFF_DOWN_RIGHT, "Shift down-right"),
+        ]:
+            tk.Radiobutton(left, text=label, variable=self.anim_offset_var, value=off).pack(anchor="w")
+
+        slot_frame = tk.Frame(left, bd=1, relief="sunken", padx=4, pady=4)
+        slot_frame.pack(fill="x", pady=(6, 4))
+
+        for i in range(MAX_ANIM_GROUPS):
+            row = tk.Frame(slot_frame)
+            row.pack(fill="x", pady=1)
+
+            lbl = tk.Label(row, text=f"{i+1}: <empty>", anchor="w", width=18)
+            lbl.pack(side="left")
+            self.anim_slot_labels.append(lbl)
+
+            sel = tk.Button(row, text="Select", width=7,
+                            command=lambda idx=i: self.select_anim_slot(idx))
+            sel.pack(side="left", padx=(4, 2))
+            self.anim_select_buttons.append(sel)
+
+            dele = tk.Button(row, text="Delete", width=7,
+                             command=lambda idx=i: self.delete_anim_slot(idx))
+            dele.pack(side="left")
+            self.anim_delete_buttons.append(dele)
+
+        tk.Label(left, text="").pack(pady=6)
+        tk.Label(left, text="Animation Steps", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+
+        self.anim_name_var = tk.StringVar(value="")
+        self.anim_name_entry = tk.Entry(left, textvariable=self.anim_name_var)
+        self.anim_name_entry.pack(fill="x", pady=(4, 4))
+        self.anim_name_entry.bind("<FocusOut>", lambda e: self.apply_anim_name())
+
+        pivot_row = tk.Frame(left)
+        pivot_row.pack(fill="x", pady=(2, 4))
+        tk.Label(pivot_row, text="Pivot hx:").pack(side="left")
+        self.pivot_hx_var = tk.IntVar(value=0)
+        tk.Spinbox(pivot_row, from_=-32, to=32, width=5, textvariable=self.pivot_hx_var,
+                command=self.apply_anim_pivot).pack(side="left", padx=(4, 8))
+        tk.Label(pivot_row, text="hy:").pack(side="left")
+        self.pivot_hy_var = tk.IntVar(value=0)
+        tk.Spinbox(pivot_row, from_=-32, to=32, width=5, textvariable=self.pivot_hy_var,
+                command=self.apply_anim_pivot).pack(side="left", padx=(4, 0))
+
+        self.step_listbox = tk.Listbox(left, height=8, exportselection=False)
+        self.step_listbox.pack(fill="x", pady=(4, 4))
+
+        step_edit = tk.Frame(left)
+        step_edit.pack(fill="x", pady=(2, 4))
+
+        tk.Label(step_edit, text="Kind:").grid(row=0, column=0, sticky="w")
+        self.step_kind_var = tk.StringVar(value="hold")
+        self.step_kind_menu = tk.OptionMenu(step_edit, self.step_kind_var, "rotate", "hold")
+        self.step_kind_menu.grid(row=0, column=1, sticky="ew", padx=(4, 8))
+
+        tk.Label(step_edit, text="Δ qturns:").grid(row=0, column=2, sticky="w")
+        self.step_delta_var = tk.IntVar(value=0)
+        self.step_delta_spin = tk.Spinbox(step_edit, from_=-8, to=8, width=5, textvariable=self.step_delta_var)
+        self.step_delta_spin.grid(row=0, column=3, sticky="w", padx=(4, 8))
+
+        tk.Label(step_edit, text="Duration ms:").grid(row=1, column=0, sticky="w")
+        self.step_duration_var = tk.IntVar(value=250)
+        self.step_duration_spin = tk.Spinbox(step_edit, from_=1, to=10000, width=8, textvariable=self.step_duration_var)
+        self.step_duration_spin.grid(row=1, column=1, sticky="w", padx=(4, 8))
+
+        tk.Button(step_edit, text="Apply Step", command=self.apply_selected_anim_step).grid(row=1, column=2, columnspan=2, sticky="ew")
+
+        step_btns = tk.Frame(left)
+        step_btns.pack(fill="x", pady=(2, 4))
+        tk.Button(step_btns, text="+ Rotate +90", command=lambda: self.add_anim_step("rotate", 1, 250)).pack(fill="x", pady=1)
+        tk.Button(step_btns, text="+ Rotate -90", command=lambda: self.add_anim_step("rotate", -1, 250)).pack(fill="x", pady=1)
+        tk.Button(step_btns, text="+ Hold", command=lambda: self.add_anim_step("hold", 0, 250)).pack(fill="x", pady=1)
+        tk.Button(step_btns, text="Delete Step", command=self.delete_selected_anim_step).pack(fill="x", pady=1)
+
+        step_btns2 = tk.Frame(left)
+        step_btns2.pack(fill="x", pady=(0, 4))
+        tk.Button(step_btns2, text="Move Up", command=lambda: self.move_anim_step(-1)).pack(fill="x", pady=1)
+        tk.Button(step_btns2, text="Move Down", command=lambda: self.move_anim_step(1)).pack(fill="x", pady=1)
+        tk.Button(step_btns2, text="Duplicate Step", command=self.duplicate_selected_anim_step).pack(fill="x", pady=1)
+
+        preview_row = tk.Frame(left)
+        preview_row.pack(fill="x", pady=(4, 0))
+        self.preview_toggle_btn = tk.Button(preview_row, text="Pause Preview", command=self.toggle_preview)
+        self.preview_toggle_btn.pack(side="left")
+        tk.Button(preview_row, text="Reset Preview", command=self.reset_preview).pack(side="left", padx=(6, 0))
 
         tk.Label(left, text="").pack(pady=6)
         tk.Label(left, text="Shortcuts", font=("Segoe UI", 10, "bold")).pack(anchor="w")
@@ -429,6 +899,22 @@ class EditorApp:
                       "• Mouse wheel: scroll horizontally\n"
                       "• Endcap zone (last 6 cols) is locked",
                  justify="left", fg="#444").pack(anchor="w")
+        
+        def _on_left_frame_configure(event):
+            self.left_canvas.configure(scrollregion=self.left_canvas.bbox("all"))
+
+        def _on_left_canvas_configure(event):
+            self.left_canvas.itemconfigure(self.left_canvas_window, width=event.width)
+
+        left.bind("<Configure>", _on_left_frame_configure)
+        self.left_canvas.bind("<Configure>", _on_left_canvas_configure)
+
+        self.left_canvas.bind("<MouseWheel>", self.on_left_panel_wheel)
+        self.left_canvas.bind("<Button-4>", lambda e: self.left_canvas.yview_scroll(-3, "units"))
+        self.left_canvas.bind("<Button-5>", lambda e: self.left_canvas.yview_scroll(3, "units"))
+        left.bind("<MouseWheel>", self.on_left_panel_wheel)
+        left.bind("<Button-4>", lambda e: self.left_canvas.yview_scroll(-3, "units"))
+        left.bind("<Button-5>", lambda e: self.left_canvas.yview_scroll(3, "units"))        
 
         self.canvas = tk.Canvas(right, bg="#101010", highlightthickness=0)
         self.hbar = tk.Scrollbar(right, orient="horizontal", command=self.canvas.xview)
@@ -455,10 +941,253 @@ class EditorApp:
         self.canvas.bind("<Button-4>", lambda e: self.canvas.xview_scroll(-3, "units"))
         self.canvas.bind("<Button-5>", lambda e: self.canvas.xview_scroll(3, "units"))
 
+        self.step_listbox.bind("<<ListboxSelect>>", lambda e: self.refresh_selected_step_editor())
+
         self.root.bind_all("<Control-c>", lambda e: self.copy_selection())
         self.root.bind_all("<Control-x>", lambda e: self.cut_selection())
         self.root.bind_all("<Control-v>", lambda e: self.paste_clipboard())
         self.root.bind_all("<Control-z>", lambda e: self.undo())
+        self.root.bind_all("<Escape>", lambda e: self.clear_selection())
+
+        self.root.bind_all("<Control-o>", lambda e: self.open_json())
+        self.root.bind_all("<Control-s>", lambda e: self.save_json())
+        self.root.bind_all("<Control-Shift-S>", lambda e: self.save_json_as())
+
+    def current_anim_def(self) -> Optional[AnimDef]:
+        if self.selected_anim_slot is None:
+            return None
+        return self.level.anim_defs[self.selected_anim_slot]
+    
+    def current_anim_step_index(self) -> Optional[int]:
+        sel = self.step_listbox.curselection()
+        if not sel:
+            return None
+        return int(sel[0])
+
+    def refresh_selected_step_editor(self) -> None:
+        anim = self.current_anim_def()
+        idx = self.current_anim_step_index()
+
+        if anim is None or idx is None or idx < 0 or idx >= len(anim.steps):
+            self.step_kind_var.set("hold")
+            self.step_delta_var.set(0)
+            self.step_duration_var.set(250)
+            return
+
+        step = anim.steps[idx]
+        self.step_kind_var.set(step.kind)
+        self.step_delta_var.set(step.delta_qturns)
+        self.step_duration_var.set(step.duration_ms)
+
+    def apply_selected_anim_step(self) -> None:
+        anim = self.current_anim_def()
+        idx = self.current_anim_step_index()
+        if anim is None or idx is None or idx < 0 or idx >= len(anim.steps):
+            return
+
+        kind = self.step_kind_var.get().strip()
+        if kind not in ("rotate", "hold"):
+            kind = "hold"
+
+        dq = int(self.step_delta_var.get())
+        dur = max(1, int(self.step_duration_var.get()))
+        if kind == "hold":
+            dq = 0
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        anim.steps[idx] = AnimStep(kind=kind, delta_qturns=dq, duration_ms=dur)
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+
+        self.refresh_anim_editor_panel()
+        self.step_listbox.selection_set(idx)
+        self.refresh_selected_step_editor()
+        self.redraw_all()
+
+    def move_anim_step(self, delta: int) -> None:
+        anim = self.current_anim_def()
+        idx = self.current_anim_step_index()
+        if anim is None or idx is None:
+            return
+
+        j = idx + delta
+        if j < 0 or j >= len(anim.steps):
+            return
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        anim.steps[idx], anim.steps[j] = anim.steps[j], anim.steps[idx]
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+
+        self.refresh_anim_editor_panel()
+        self.step_listbox.selection_set(j)
+        self.refresh_selected_step_editor()
+        self.redraw_all()
+
+    def duplicate_selected_anim_step(self) -> None:
+        anim = self.current_anim_def()
+        idx = self.current_anim_step_index()
+        if anim is None or idx is None or idx < 0 or idx >= len(anim.steps):
+            return
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        step = anim.steps[idx]
+        anim.steps.insert(idx + 1, AnimStep(kind=step.kind, delta_qturns=step.delta_qturns, duration_ms=step.duration_ms))
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+
+        self.refresh_anim_editor_panel()
+        self.step_listbox.selection_set(idx + 1)
+        self.refresh_selected_step_editor()
+        self.redraw_all()
+
+    def refresh_anim_editor_panel(self) -> None:
+        anim = self.current_anim_def()
+
+        self.step_listbox.delete(0, "end")
+
+        if anim is None:
+            self.anim_name_var.set("")
+            self.pivot_hx_var.set(0)
+            self.pivot_hy_var.set(0)
+            self.anim_name_entry.configure(state="disabled")
+            return
+
+        self.anim_name_entry.configure(state="normal")
+        self.anim_name_var.set(anim.name)
+        self.pivot_hx_var.set(anim.pivot_hx)
+        self.pivot_hy_var.set(anim.pivot_hy)
+
+        for i, step in enumerate(anim.steps):
+            if step.kind == "rotate":
+                label = f"{i+1}. Rotate {step.delta_qturns:+d} qturns over {step.duration_ms} ms"
+            else:
+                label = f"{i+1}. Hold {step.duration_ms} ms"
+            self.step_listbox.insert("end", label)
+
+        if anim is not None and anim.steps and not self.step_listbox.curselection():
+            self.step_listbox.selection_set(0)
+        self.refresh_selected_step_editor()
+
+    def apply_anim_name(self) -> None:
+        anim = self.current_anim_def()
+        if anim is None:
+            return
+        name = self.anim_name_var.get().strip()
+        if not name:
+            return
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        anim.name = name
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+        self._refresh_animation_ui()
+
+    def apply_anim_pivot(self) -> None:
+        anim = self.current_anim_def()
+        if anim is None:
+            return
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        anim.pivot_hx = int(self.pivot_hx_var.get())
+        anim.pivot_hy = int(self.pivot_hy_var.get())
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+        self.redraw_all()
+
+    def add_anim_step(self, kind: str, delta_qturns: int, duration_ms: int) -> None:
+        anim = self.current_anim_def()
+        if anim is None:
+            return
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        anim.steps.append(AnimStep(kind=kind, delta_qturns=delta_qturns, duration_ms=duration_ms))
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+        self.refresh_anim_editor_panel()
+        self.step_listbox.selection_clear(0, "end")
+        self.step_listbox.selection_set(len(anim.steps) - 1)
+        self.refresh_selected_step_editor()
+        self.redraw_all()
+
+    def delete_selected_anim_step(self) -> None:
+        anim = self.current_anim_def()
+        if anim is None:
+            return
+
+        sel = self.step_listbox.curselection()
+        if not sel:
+            return
+        idx = int(sel[0])
+        if idx < 0 or idx >= len(anim.steps):
+            return
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        del anim.steps[idx]
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+        self.refresh_anim_editor_panel()
+        if anim.steps:
+            self.step_listbox.selection_set(min(idx, len(anim.steps) - 1))
+        self.refresh_selected_step_editor()
+        self.redraw_all()
+
+    def toggle_preview(self) -> None:
+        self.preview_running = not self.preview_running
+        self.preview_toggle_btn.configure(text=("Pause Preview" if self.preview_running else "Resume Preview"))
+
+    def reset_preview(self) -> None:
+        self.preview_time_ms = 0
+        self.redraw_all()
+
+    def _schedule_preview_tick(self) -> None:
+        self.root.after(self._preview_timer_ms, self._preview_tick)
+
+    def _preview_tick(self) -> None:
+        if self.preview_running:
+            self.preview_time_ms += self._preview_timer_ms
+            self.redraw_all()
+        self._schedule_preview_tick()
+
+    def eval_anim_angle_turns(self, anim: AnimDef) -> float:
+        if anim is None or not anim.steps:
+            return 0.0
+
+        total = sum(max(1, s.duration_ms) for s in anim.steps)
+        if total <= 0:
+            return 0.0
+
+        t = self.preview_time_ms % total
+        angle = 0.0
+        walked = 0
+
+        for step in anim.steps:
+            dur = max(1, step.duration_ms)
+            if t < walked + dur:
+                if step.kind == "rotate":
+                    u = (t - walked) / dur
+                    angle += 0.25 * step.delta_qturns * u
+                break
+
+            if step.kind == "rotate":
+                angle += 0.25 * step.delta_qturns
+            walked += dur
+
+        return angle
+
+    def clear_selection(self) -> None:
+        self._sel_a = None
+        self._sel_b = None
+        self._selecting = False
+        self._draw_selection_overlay()
+        self._refresh_animation_ui()
 
     def _update_modifier_enable(self) -> None:
         shape = self.shape_var.get()
@@ -471,6 +1200,79 @@ class EditorApp:
                 rb.configure(state=("normal" if enabled else "disabled"))
         if not enabled:
             self.mod_var.set(MOD_NONE)
+
+    def _has_selected_primitives(self) -> bool:
+        b = self._sel_bounds()
+        if not b:
+            return False
+        x0, y0, x1, y1 = b
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                if isinstance(self.level.get_cell(x, y), PrimitiveObstacle):
+                    return True
+        return False
+
+    def _first_free_anim_slot(self) -> Optional[int]:
+        for i, a in enumerate(self.level.anim_defs):
+            if a is None:
+                return i
+        return None
+
+    def _refresh_animation_ui(self) -> None:
+        free = self._first_free_anim_slot()
+        can_new = free is not None and self._has_selected_primitives()
+        self.new_anim_btn.configure(state=("normal" if can_new else "disabled"))
+
+        for i in range(MAX_ANIM_GROUPS):
+            a = self.level.anim_defs[i]
+            text = f"{i+1}: <empty>" if a is None else f"{i+1}: {a.name}"
+            self.anim_slot_labels[i].configure(text=text)
+
+            self.anim_select_buttons[i].configure(state=("normal" if a is not None else "disabled"))
+            self.anim_delete_buttons[i].configure(state=("normal" if a is not None else "disabled"))
+
+            if self.selected_anim_slot == i and a is not None:
+                self.anim_slot_labels[i].configure(fg="#ffd54a")
+            else:
+                self.anim_slot_labels[i].configure(fg="#000000")
+        self.refresh_anim_editor_panel()
+
+    def select_anim_slot(self, idx: int) -> None:
+        if self.level.anim_defs[idx] is None:
+            return
+        self.selected_anim_slot = idx
+        self.paint_mode_var.set(PAINT_MODE_ANIM_REF)
+        self._refresh_animation_ui()
+        self.refresh_anim_editor_panel()
+        self.redraw_all()
+
+    def delete_anim_slot(self, idx: int) -> None:
+        a = self.level.anim_defs[idx]
+        if a is None:
+            return
+
+        if not messagebox.askyesno(
+            "Delete animation",
+            f'Delete animation group "{a.name}"?\n\nThis will also remove all references to it from the level.'
+        ):
+            return
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        self.touch_all_cells_for_anim_group_before(idx)
+
+        self.level.anim_defs[idx] = None
+        self.level.clear_anim_group_refs(idx)
+
+        self.touch_all_anim_defs_after()
+        self.touch_all_cells_for_anim_group_after(idx)
+        self.commit_txn()
+
+        if self.selected_anim_slot == idx:
+            self.selected_anim_slot = None
+
+        self.redraw_all()
+        self._refresh_animation_ui()
 
     # -------- View / layout --------
 
@@ -521,6 +1323,7 @@ class EditorApp:
             self.width_var.set(self.level.width)
             self._rebuild_canvas_region()
             self.redraw_all()
+            self._refresh_animation_ui()
 
     # -------- Undo plumbing --------
 
@@ -531,16 +1334,37 @@ class EditorApp:
         self._txn_before_cells.clear()
         self._txn_after_cells.clear()
         self._txn_before_width = self.level.width
+        self._txn_before_anim_defs = list(self.level.anim_defs)
 
     def touch_cell_before(self, x: int, y: int) -> None:
         k = self.level.key(x, y)
         if k in self._txn_before_cells:
             return
-        self._txn_before_cells[k] = self.level.get_obstacle(x, y)
+        self._txn_before_cells[k] = self.level.get_cell(x, y)
 
     def touch_cell_after(self, x: int, y: int) -> None:
         k = self.level.key(x, y)
-        self._txn_after_cells[k] = self.level.get_obstacle(x, y)
+        self._txn_after_cells[k] = self.level.get_cell(x, y)
+
+    def touch_all_anim_defs_before(self) -> None:
+        self._txn_before_anim_defs = list(self.level.anim_defs)
+
+    def touch_all_anim_defs_after(self) -> None:
+        pass
+
+    def touch_all_cells_for_anim_group_before(self, idx: int) -> None:
+        for y in range(self.level.height):
+            for x in range(self.level.width):
+                c = self.level.get_cell(x, y)
+                if isinstance(c, AnimGroupRef) and c.group_index == idx:
+                    self.touch_cell_before(x, y)
+
+    def touch_all_cells_for_anim_group_after(self, idx: int) -> None:
+        for y in range(self.level.height):
+            for x in range(self.level.width):
+                c = self.level.get_cell(x, y)
+                if isinstance(c, AnimGroupRef) and c.group_index == idx:
+                    self.touch_cell_after(x, y)
 
     def commit_txn(self) -> None:
         if not self._txn_active:
@@ -549,22 +1373,26 @@ class EditorApp:
         for k in list(self._txn_before_cells.keys()):
             if k not in self._txn_after_cells:
                 xs, ys = k.split(",")
-                self._txn_after_cells[k] = self.level.get_obstacle(int(xs), int(ys))
+                self._txn_after_cells[k] = self.level.get_cell(int(xs), int(ys))
 
         act = UndoAction(
             before_cells=dict(self._txn_before_cells),
             after_cells=dict(self._txn_after_cells),
             before_width=self._txn_before_width,
             after_width=self.level.width,
+            before_anim_defs=list(self._txn_before_anim_defs),
+            after_anim_defs=list(self.level.anim_defs),
         )
 
         if (act.before_cells == act.after_cells and
-            act.before_width == act.after_width):
+            act.before_width == act.after_width and
+            act.before_anim_defs == act.after_anim_defs):
             self._txn_active = False
             return
 
         self._undo.append(act)
         self._txn_active = False
+        self.mark_dirty()
 
     def undo(self) -> None:
         if not self._undo:
@@ -572,22 +1400,218 @@ class EditorApp:
         act = self._undo.pop()
 
         self.level.resize_width(act.before_width)
+        self.level.anim_defs = list(act.before_anim_defs)
 
+        self.level.cells.clear()
         for k, prev in act.before_cells.items():
-            xs, ys = k.split(",")
-            x, y = int(xs), int(ys)
-            if not self.level.in_bounds(x, y):
-                continue
-            if prev is None:
-                self.level.obstacles.pop(k, None)
-            else:
-                self.level.obstacles[k] = prev
+            if prev is not None:
+                self.level.cells[k] = prev
 
         self.level.strip_endcap_from_authored()
 
         self.width_var.set(self.level.width)
         self._rebuild_canvas_region()
         self.redraw_all()
+        self._refresh_animation_ui()
+
+    # -------- Selection -> AnimDef conversion --------
+
+    def _sel_bounds(self) -> Optional[Tuple[int, int, int, int]]:
+        if not self._sel_a or not self._sel_b:
+            return None
+        ax, ay = self._sel_a
+        bx, by = self._sel_b
+        x0, x1 = (ax, bx) if ax <= bx else (bx, ax)
+        y0, y1 = (ay, by) if ay <= by else (by, ay)
+        return x0, y0, x1, y1
+
+    def _base_polygon(self, shape: str):
+        if shape == SHAPE_SQUARE:
+            return [(0.12, 0.12), (0.88, 0.12), (0.88, 0.88), (0.12, 0.88)]
+        if shape == SHAPE_RIGHT_TRI:
+            return [(0.08, 0.92), (0.92, 0.92), (0.92, 0.08)]
+        if shape == SHAPE_HALF_SPIKE:
+            return [(0.18, 0.88), (0.82, 0.88), (0.50, 0.45)]
+        if shape == SHAPE_FULL_SPIKE:
+            return [(0.12, 0.90), (0.88, 0.90), (0.50, 0.10)]
+        return [(0.12, 0.12), (0.88, 0.12), (0.88, 0.88), (0.12, 0.88)]
+
+    def _apply_mod(self, p, mod: str):
+        u, v = p
+        if mod == MOD_NONE:
+            return (u, v)
+        if mod == MOD_ROT_L:
+            return (v, 1.0 - u)
+        if mod == MOD_ROT_R:
+            return (1.0 - v, u)
+        if mod == MOD_INVERT:
+            return (1.0 - u, 1.0 - v)
+        return (u, v)
+
+    def _compute_weighted_origin_from_selection(self, cells: List[Tuple[int, int, PrimitiveObstacle]]) -> Tuple[float, float]:
+        total_area = 0.0
+        sum_cx = 0.0
+        sum_cy = 0.0
+
+        for x, y, obs in cells:
+            poly = self._base_polygon(obs.shape)
+            poly = [self._apply_mod(p, obs.mod if obs.shape in MOD_SHAPES else MOD_NONE) for p in poly]
+            world_poly = [(x + u, y + v) for (u, v) in poly]
+            cx, cy, area = poly_centroid_area(world_poly)
+            if area <= 1e-9:
+                cx = x + 0.5
+                cy = y + 0.5
+                area = 1.0
+            total_area += area
+            sum_cx += cx * area
+            sum_cy += cy * area
+
+        if total_area <= 1e-9:
+            return 0.5, 0.5
+
+        ox = sum_cx / total_area
+        oy = sum_cy / total_area
+
+        ox = round(ox * 2.0) / 2.0
+        oy = round(oy * 2.0) / 2.0
+        return ox, oy
+
+    def _derive_owning_cell_and_offset(self, origin_x: float, origin_y: float) -> Tuple[int, int, str]:
+        fxp = origin_x - math.floor(origin_x)
+        fyp = origin_y - math.floor(origin_y)
+
+        if abs(fxp - 0.5) < 1e-6:
+            cell_x = math.floor(origin_x)
+            shift_x = False
+        else:
+            cell_x = int(round(origin_x)) - 1
+            shift_x = True
+
+        if abs(fyp - 0.5) < 1e-6:
+            cell_y = math.floor(origin_y)
+            shift_y = False
+        else:
+            cell_y = int(round(origin_y)) - 1
+            shift_y = True
+
+        if shift_x and shift_y:
+            off = AG_OFF_DOWN_RIGHT
+        elif shift_x:
+            off = AG_OFF_RIGHT
+        elif shift_y:
+            off = AG_OFF_DOWN
+        else:
+            off = AG_OFF_NONE
+
+        return int(cell_x), int(cell_y), off
+
+    def _build_anim_def_from_selection(self, name: str) -> Optional[Tuple[int, int, str, AnimDef, List[Tuple[int, int]]]]:
+        b = self._sel_bounds()
+        if not b:
+            return None
+
+        x0, y0, x1, y1 = b
+        selected_prims: List[Tuple[int, int, PrimitiveObstacle]] = []
+        selected_cells: List[Tuple[int, int]] = []
+
+        x1 = min(x1, self.level.endcap_x0() - 1) if self.level.endcap_x0() > 0 else x1
+        if x1 < x0:
+            return None
+
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                cell = self.level.get_cell(x, y)
+                if isinstance(cell, PrimitiveObstacle):
+                    selected_prims.append((x, y, cell))
+                    selected_cells.append((x, y))
+
+        if not selected_prims:
+            return None
+
+        origin_x, origin_y = self._compute_weighted_origin_from_selection(selected_prims)
+        owning_x, owning_y, offset_mod = self._derive_owning_cell_and_offset(origin_x, origin_y)
+
+        if not self.level.in_bounds(owning_x, owning_y):
+            return None
+        if self.level.in_endcap(owning_x):
+            return None
+
+        primitives: List[AnimPrimitive] = []
+        for x, y, obs in selected_prims:
+            pcx = x + 0.5
+            pcy = y + 0.5
+            hx = int(round((pcx - origin_x) * 2.0))
+            hy = int(round((pcy - origin_y) * 2.0))
+            primitives.append(AnimPrimitive(hx=hx, hy=hy, shape=obs.shape, mod=obs.mod))
+
+        anim_def = AnimDef(
+            name=name,
+            pivot_hx=0,
+            pivot_hy=0,
+            primitives=primitives,
+            steps=[]
+        )
+
+        return owning_x, owning_y, offset_mod, anim_def, selected_cells
+
+    def new_animation_from_selection(self) -> None:
+        free = self._first_free_anim_slot()
+        if free is None:
+            return
+
+        if not self._has_selected_primitives():
+            messagebox.showinfo("New animation", "Select one or more primitive shapes first.")
+            return
+
+        dlg = NameDialog(self.root, "New Animation Group", "Enter animation group name:")
+        if dlg.result is None:
+            return
+
+        built = self._build_anim_def_from_selection(dlg.result)
+        if built is None:
+            messagebox.showerror("New animation", "Could not create animation group from the current selection.")
+            return
+
+        owning_x, owning_y, offset_mod, anim_def, selected_cells = built
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+
+        for (x, y) in selected_cells:
+            self.touch_cell_before(x, y)
+
+        self.touch_cell_before(owning_x, owning_y)
+
+        for (x, y) in selected_cells:
+            self.level.clear_cell(x, y)
+
+        self.level.anim_defs[free] = anim_def
+
+        if not anim_def.steps:
+            anim_def.steps = [
+                AnimStep(kind="rotate", delta_qturns=1, duration_ms=250),
+                AnimStep(kind="hold", duration_ms=250),
+                AnimStep(kind="rotate", delta_qturns=1, duration_ms=250),
+                AnimStep(kind="hold", duration_ms=250),
+                AnimStep(kind="rotate", delta_qturns=1, duration_ms=250),
+                AnimStep(kind="hold", duration_ms=250),
+                AnimStep(kind="rotate", delta_qturns=-3, duration_ms=250),
+                AnimStep(kind="hold", duration_ms=500),
+            ]
+
+        self.level.set_cell(owning_x, owning_y, AnimGroupRef(group_index=free, offset_mod=offset_mod))
+
+        for (x, y) in selected_cells:
+            self.touch_cell_after(x, y)
+        self.touch_cell_after(owning_x, owning_y)
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+
+        self.selected_anim_slot = free
+        self.paint_mode_var.set(PAINT_MODE_ANIM_REF)
+        self.redraw_all()
+        self._refresh_animation_ui()
+        self.clear_selection()
 
     # -------- Drawing --------
 
@@ -633,55 +1657,147 @@ class EditorApp:
         x0 = self.level.endcap_x0() * CELL
         self.canvas.create_line(x0, y0, x0, y1, fill="#7a2cff", width=3)
 
-    def _draw_cell(self, x: int, y: int, tag: str) -> None:
-        x0, y0, x1, y1 = self._cell_rect(x, y)
+    def _rotate_point_about(self, x: float, y: float, ox: float, oy: float, turns: float) -> Tuple[float, float]:
+        a = turns * math.tau
+        c = math.cos(a)
+        s = math.sin(a)
+        dx = x - ox
+        dy = y - oy
+        return (ox + dx * c - dy * s, oy + dx * s + dy * c)
 
-        obs = self.level.get_obstacle(x, y)
-        if obs:
-            self._draw_obstacle(x0, y0, x1, y1, obs, tag)
-
-        self.canvas.create_rectangle(x0, y0, x1, y1, outline=GRID_LINE, width=1, tags=tag)
-
-    def _draw_obstacle(self, x0, y0, x1, y1, obs: Obstacle, tag: str, ghost: bool = False) -> None:
-        shape = obs.shape
-        mod = obs.mod if shape in MOD_SHAPES else MOD_NONE
-
+    def _draw_rotated_primitive_polygon(self,
+                                        center_col: float,
+                                        center_row: float,
+                                        pivot_col: float,
+                                        pivot_row: float,
+                                        turns: float,
+                                        shape: str,
+                                        mod: str,
+                                        tag: str,
+                                        fill: str,
+                                        outline: str) -> None:
         poly = self._base_polygon(shape)
-        poly = [self._apply_mod(p, mod) for p in poly]
+        use_mod = mod if shape in MOD_SHAPES else MOD_NONE
+        poly = [self._apply_mod(p, use_mod) for p in poly]
+
+        pts = []
+        for u, v in poly:
+            col = (center_col - 0.5) + u
+            row = (center_row - 0.5) + v
+            col, row = self._rotate_point_about(col, row, pivot_col, pivot_row, turns)
+            x = col * CELL
+            y = row * CELL + self._y_offset_px
+            pts.extend([x, y])
+
+        self.canvas.create_polygon(
+            pts,
+            fill=fill,
+            outline=outline,
+            width=2,
+            tags=tag
+        )
+    
+    def _draw_primitive_polygon(self, x0, y0, x1, y1, shape: str, mod: str,
+                                tag: str, fill: str, outline: str, stipple: str = "") -> None:
+        use_mod = mod if shape in MOD_SHAPES else MOD_NONE
+        poly = self._base_polygon(shape)
+        poly = [self._apply_mod(p, use_mod) for p in poly]
 
         pts = []
         for u, v in poly:
             pts.extend([x0 + u * (x1 - x0), y0 + v * (y1 - y0)])
 
-        fill = "" if ghost else "#0b0b0b"
-        outline = "#ff3bd4" if ghost else "#d0d0d0"
-        width = 2 if ghost else 2
+        self.canvas.create_polygon(
+            pts,
+            fill=fill,
+            outline=outline,
+            width=2,
+            stipple=stipple,
+            tags=tag
+        )
 
-        stipple = "gray25" if ghost else ""
-        self.canvas.create_polygon(pts, fill=fill, outline=outline, width=width, stipple=stipple, tags=tag)
+    def _draw_cell(self, x: int, y: int, tag: str) -> None:
+        x0, y0, x1, y1 = self._cell_rect(x, y)
 
-    def _base_polygon(self, shape: str):
-        if shape == SHAPE_SQUARE:
-            return [(0.12, 0.12), (0.88, 0.12), (0.88, 0.88), (0.12, 0.88)]
-        if shape == SHAPE_RIGHT_TRI:
-            return [(0.08, 0.92), (0.92, 0.92), (0.92, 0.08)]
-        if shape == SHAPE_HALF_SPIKE:
-            return [(0.18, 0.88), (0.82, 0.88), (0.50, 0.45)]
-        if shape == SHAPE_FULL_SPIKE:
-            return [(0.12, 0.90), (0.88, 0.90), (0.50, 0.10)]
-        return [(0.12, 0.12), (0.88, 0.12), (0.88, 0.88), (0.12, 0.88)]
+        cell = self.level.get_cell(x, y)
+        if isinstance(cell, PrimitiveObstacle):
+            self._draw_primitive_polygon(
+                x0, y0, x1, y1,
+                cell.shape, cell.mod,
+                tag,
+                PRIM_FILL, PRIM_OUTLINE
+            )
+        elif isinstance(cell, AnimGroupRef):
+            self._draw_anim_group_preview(x, y, cell, tag)
 
-    def _apply_mod(self, p, mod: str):
-        u, v = p
-        if mod == MOD_NONE:
-            return (u, v)
-        if mod == MOD_ROT_L:
-            return (v, 1.0 - u)
-        if mod == MOD_ROT_R:
-            return (1.0 - v, u)
-        if mod == MOD_INVERT:
-            return (1.0 - u, 1.0 - v)
-        return (u, v)
+        self.canvas.create_rectangle(x0, y0, x1, y1, outline=GRID_LINE, width=1, tags=tag)
+
+    def _draw_anim_group_preview(self, cell_x: int, cell_y: int, ref: AnimGroupRef, tag: str) -> None:
+        anim = self.level.anim_defs[ref.group_index]
+        if anim is None:
+            x0, y0, x1, y1 = self._cell_rect(cell_x, cell_y)
+            self.canvas.create_rectangle(
+                x0 + 3, y0 + 3, x1 - 3, y1 - 3,
+                outline=ANIM_OUTLINE, width=2, tags=tag
+            )
+            return
+
+        anchor_col = cell_x + 0.5
+        anchor_row = cell_y + 0.5
+
+        if ref.offset_mod in (AG_OFF_RIGHT, AG_OFF_DOWN_RIGHT):
+            anchor_col += 0.5
+        if ref.offset_mod in (AG_OFF_DOWN, AG_OFF_DOWN_RIGHT):
+            anchor_row += 0.5
+
+        pivot_col = anchor_col + 0.5 * anim.pivot_hx
+        pivot_row = anchor_row + 0.5 * anim.pivot_hy
+
+        turns = self.eval_anim_angle_turns(anim)
+
+        for p in anim.primitives:
+            prim_center_col = anchor_col + 0.5 * p.hx
+            prim_center_row = anchor_row + 0.5 * p.hy
+
+            self._draw_rotated_primitive_polygon(
+                prim_center_col,
+                prim_center_row,
+                pivot_col,
+                pivot_row,
+                turns,
+                p.shape,
+                p.mod,
+                tag,
+                ANIM_FILL,
+                ANIM_OUTLINE
+            )
+
+        cx0, cy0, cx1, cy1 = self._cell_rect(cell_x, cell_y)
+        owner_outline = ANIM_OWNING_SELECTED if self.selected_anim_slot == ref.group_index else ANIM_OUTLINE
+
+        self.canvas.create_rectangle(
+            cx0 + 3, cy0 + 3, cx1 - 3, cy1 - 3,
+            outline=owner_outline,
+            width=2,
+            dash=(4, 2),
+            tags=tag
+        )
+
+        self.canvas.create_text(
+            (cx0 + cx1) / 2,
+            cy0 + 8,
+            text=f"A{ref.group_index + 1}",
+            fill=owner_outline,
+            tags=tag,
+            font=("Segoe UI", 8, "bold")
+        )
+
+    def _cell_rect_float(self, col0: float, row0: float, col1: float, row1: float) -> Tuple[float, float, float, float]:
+        x0 = col0 * CELL
+        y0 = row0 * CELL + self._y_offset_px
+        x1 = col1 * CELL
+        y1 = row1 * CELL + self._y_offset_px
+        return x0, y0, x1, y1
 
     def _draw_endcap_ghost(self) -> None:
         self.canvas.delete("endcap")
@@ -692,8 +1808,13 @@ class EditorApp:
             if not self.level.in_bounds(x, y):
                 continue
             x0, y0, x1, y1 = self._cell_rect(x, y)
-            obs = Obstacle.from_obj(e)
-            self._draw_obstacle(x0, y0, x1, y1, obs, tag="endcap", ghost=True)
+            obs = PrimitiveObstacle.from_obj(e)
+            self._draw_primitive_polygon(
+                x0, y0, x1, y1,
+                obs.shape, obs.mod,
+                "endcap",
+                "", "#ff3bd4", "gray25"
+            )
 
     def _draw_portal_icon(self) -> None:
         self.canvas.delete("portal")
@@ -715,17 +1836,6 @@ class EditorApp:
             x0 + pad + 5, y0 + pad + 5, x1 - pad - 5, y1b - pad - 5,
             outline="#ff8fe9", width=2, stipple="gray25", tags="portal"
         )
-
-    # -------- Selection rectangle --------
-
-    def _sel_bounds(self) -> Optional[Tuple[int, int, int, int]]:
-        if not self._sel_a or not self._sel_b:
-            return None
-        ax, ay = self._sel_a
-        bx, by = self._sel_b
-        x0, x1 = (ax, bx) if ax <= bx else (bx, ax)
-        y0, y1 = (ay, by) if ay <= by else (by, ay)
-        return x0, y0, x1, y1
 
     def _draw_selection_overlay(self) -> None:
         if self._sel_rect_id is not None:
@@ -766,11 +1876,11 @@ class EditorApp:
         cells = []
         for y in range(y0, y1 + 1):
             for x in range(x0, x1 + 1):
-                obs = self.level.get_obstacle(x, y)
-                if obs:
-                    cells.append({"dx": x - x0, "dy": y - y0, **obs.to_obj()})
+                cell = self.level.get_cell(x, y)
+                if cell:
+                    cells.append({"dx": x - x0, "dy": y - y0, **cell.to_obj()})
 
-        self._clipboard = {"w": (x1 - x0 + 1), "h": (y1 - y0 + 1), "obstacles": cells}
+        self._clipboard = {"w": (x1 - x0 + 1), "h": (y1 - y0 + 1), "cells": cells}
 
     def cut_selection(self) -> None:
         self.copy_selection()
@@ -794,6 +1904,8 @@ class EditorApp:
                 self.touch_cell_after(x, y)
         self.commit_txn()
         self.redraw_all()
+        self._refresh_animation_ui()
+        self.clear_selection()
 
     def paste_clipboard(self) -> None:
         if not self._clipboard:
@@ -813,21 +1925,28 @@ class EditorApp:
 
             self.width_var.set(self.level.width)
             self._rebuild_canvas_region()
+            self.clear_selection()
 
         self.begin_txn()
-        for c in self._clipboard["obstacles"]:
+        for c in self._clipboard["cells"]:
             x = tx + int(c["dx"])
             y = ty + int(c["dy"])
             if not self.level.in_bounds(x, y):
                 continue
             if self.level.in_endcap(x):
                 continue
+
             self.touch_cell_before(x, y)
-            obs = Obstacle.from_obj(c)
-            self.level.set_obstacle(x, y, obs)
+            typ = c.get("type", "primitive")
+            if typ == "anim_ref":
+                cell: CellValue = AnimGroupRef.from_obj(c)
+            else:
+                cell = PrimitiveObstacle.from_obj(c)
+            self.level.set_cell(x, y, cell)
             self.touch_cell_after(x, y)
         self.commit_txn()
         self.redraw_all()
+        self._refresh_animation_ui()
 
     # -------- Painting / selection --------
 
@@ -842,6 +1961,7 @@ class EditorApp:
             self._sel_a = cell
             self._sel_b = cell
             self._draw_selection_overlay()
+            self._refresh_animation_ui()
             return
 
         self._painting = True
@@ -861,6 +1981,7 @@ class EditorApp:
         if self._selecting:
             self._sel_b = cell
             self._draw_selection_overlay()
+            self._refresh_animation_ui()
             return
 
         if not self._painting or self._erasing:
@@ -872,9 +1993,11 @@ class EditorApp:
         if self._selecting:
             self._selecting = False
             self._draw_selection_overlay()
+            self._refresh_animation_ui()
             return
         self.commit_txn()
         self.redraw_all()
+        self._refresh_animation_ui()
 
     def on_right_down(self, e: tk.Event) -> None:
         cell = self.event_to_cell(e)
@@ -914,18 +2037,29 @@ class EditorApp:
         self._erasing = False
         self.commit_txn()
         self.redraw_all()
+        self._refresh_animation_ui()
 
     def _apply_left_action(self, x: int, y: int) -> None:
         if self.level.in_endcap(x):
             return
 
-        shape = self.shape_var.get()
-        mod = self.mod_var.get()
-        if shape not in MOD_SHAPES:
-            mod = MOD_NONE
-
         self.touch_cell_before(x, y)
-        self.level.set_obstacle(x, y, Obstacle(shape=shape, mod=mod))
+
+        if self.paint_mode_var.get() == PAINT_MODE_ANIM_REF:
+            if self.selected_anim_slot is None or self.level.anim_defs[self.selected_anim_slot] is None:
+                self.touch_cell_after(x, y)
+                return
+            self.level.set_cell(
+                x, y,
+                AnimGroupRef(group_index=self.selected_anim_slot, offset_mod=self.anim_offset_var.get())
+            )
+        else:
+            shape = self.shape_var.get()
+            mod = self.mod_var.get()
+            if shape not in MOD_SHAPES:
+                mod = MOD_NONE
+            self.level.set_cell(x, y, PrimitiveObstacle(shape=shape, mod=mod))
+
         self.touch_cell_after(x, y)
         self.redraw_cell(x, y)
 
@@ -935,7 +2069,12 @@ class EditorApp:
         delta = -1 if e.delta > 0 else 1
         self.canvas.xview_scroll(delta * 3, "units")
 
+    def on_left_panel_wheel(self, e: tk.Event) -> None:
+        delta = -1 if e.delta > 0 else 1
+        self.left_canvas.yview_scroll(delta * 3, "units")
+
     # -------- File ops --------
+
     def export_bin(self) -> None:
         path = filedialog.asksaveasfilename(
             title="Export Level Binary",
@@ -950,26 +2089,44 @@ class EditorApp:
         except Exception as ex:
             messagebox.showerror("Export failed", str(ex))
 
-    def export_json(self) -> None:
+    def _write_json_to_path(self, path: str) -> None:
+        self.level.strip_endcap_from_authored()
+        data = self.level.to_json_obj()
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        self.current_file_path = path
+        self.is_dirty = False
+        self._update_window_title()
+
+    def save_json(self) -> None:
+        if not self.current_file_path:
+            self.save_json_as()
+            return
+
+        try:
+            self._write_json_to_path(self.current_file_path)
+            messagebox.showinfo("Save", f"Saved:\n{self.current_file_path}")
+        except Exception as ex:
+            messagebox.showerror("Save failed", str(ex))
+
+    def save_json_as(self) -> None:
         path = filedialog.asksaveasfilename(
-            title="Export Level JSON",
+            title="Save Level JSON As",
             defaultextension=".json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
         )
         if not path:
             return
 
-        self.level.strip_endcap_from_authored()
-        data = self.level.to_json_obj()
-
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            messagebox.showinfo("Export", f"Saved:\n{path}")
+            self._write_json_to_path(path)
+            messagebox.showinfo("Save", f"Saved:\n{path}")
         except Exception as ex:
-            messagebox.showerror("Export failed", str(ex))
+            messagebox.showerror("Save failed", str(ex))
 
-    def import_json(self) -> None:
+    def open_json(self) -> None:
         path = filedialog.askopenfilename(
             title="Import Level JSON",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
@@ -980,9 +2137,13 @@ class EditorApp:
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
             self.level = Level.from_json_obj(obj)
+            self.current_file_path = path
             self.width_var.set(self.level.width)
             self._rebuild_canvas_region()
             self.redraw_all()
+            self._refresh_animation_ui()
+            self.is_dirty = False
+            self._update_window_title()
         except Exception as ex:
             messagebox.showerror("Import failed", str(ex))
 
@@ -990,9 +2151,14 @@ class EditorApp:
         if not messagebox.askyesno("New", "Clear the level?"):
             return
         self.level = Level(width=DEFAULT_W)
+        self.selected_anim_slot = None
+        self.current_file_path = None
         self.width_var.set(self.level.width)
         self._rebuild_canvas_region()
         self.redraw_all()
+        self._refresh_animation_ui()
+        self.is_dirty = False
+        self._update_window_title()
 
 # -----------------------------
 # Main
@@ -1001,7 +2167,7 @@ class EditorApp:
 def main() -> None:
     root = tk.Tk()
     EditorApp(root)
-    root.minsize(980, 360)
+    root.minsize(1120, 420)
     root.mainloop()
 
 if __name__ == "__main__":

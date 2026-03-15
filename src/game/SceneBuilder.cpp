@@ -3,6 +3,7 @@
 #include "Hud.hpp"
 #include "Playfield.hpp"
 #include "LevelMath.hpp"
+#include <cmath>
 
 namespace gv {
 
@@ -36,6 +37,20 @@ static inline int randRange(uint32_t& s, int lo, int hi) {
 
 static inline fx fxFromMilli(int v) {
     return fx::fromRaw((v * (1 << fx::SHIFT)) / 1000);
+}
+
+static inline void turnsToSinCos(fx turns, fx& c, fx& s) {
+    const double t = double(turns.raw()) / double(1 << fx::SHIFT);
+    const double a = t * 6.28318530717958647692;
+    c = fx::fromRaw(int32_t(std::lround(std::cos(a) * double(1 << fx::SHIFT))));
+    s = fx::fromRaw(int32_t(std::lround(std::sin(a) * double(1 << fx::SHIFT))));
+}
+
+static inline void rotateXYAround(Vec3fx& p, const Vec3fx& pivot, fx c, fx s) {
+    const fx dx = p.x - pivot.x;
+    const fx dy = p.y - pivot.y;
+    p.x = pivot.x + dx * c - dy * s;
+    p.y = pivot.y + dx * s + dy * c;
 }
 
 void SceneBuilder::updateExplosion(ExplosionState& explosion, fx dt) const {
@@ -130,8 +145,8 @@ void SceneBuilder::updatePortalRays(PortalRayState& portalRays, fx dt) const {
 }
 
 void SceneBuilder::drawPortalRays(RenderList& rl, const Camera& cam, const Game& game,
-                              fx scrollX, const PortalRayState& portalRays,
-                              uint16_t color) const {
+                                  fx scrollX, const PortalRayState& portalRays,
+                                  uint16_t color) const {
     if (!game.hasLevel()) return;
     if (!portalRays.initialized) return;
 
@@ -141,11 +156,7 @@ void SceneBuilder::drawPortalRays(RenderList& rl, const Camera& cam, const Game&
 
     const fx portalX = worldXForColumn(portalCol, scrollX) + fi(kCellSize / 2);
 
-    int py = int(h.portalY);
-    if (py < 0) py = 0;
-    if (py >= kLevelHeight) py = kLevelHeight - 1;
-
-    const fx portalY = worldYForRow(py) + fi(kCellSize / 2);
+    const fx portalY = worldYForRow(4) + fi(kCellSize / 2);
     const fx portalZ = fi(kCellSize / 2);
 
     const Vec3fx center{ portalX, portalY, portalZ };
@@ -173,7 +184,7 @@ void SceneBuilder::drawPortalRays(RenderList& rl, const Camera& cam, const Game&
 }
 
 void SceneBuilder::trailPushLevelPoint(TrailState& trail, const Camera& cam,
-                                   fx levelX, fx y, fx z) const {
+                                       fx levelX, fx y, fx z) const {
     if (trail.count > 0) {
         int lastIdx = trail.head - 1;
         if (lastIdx < 0) lastIdx += kTrailMax;
@@ -202,7 +213,7 @@ void SceneBuilder::trailPushLevelPoint(TrailState& trail, const Camera& cam,
 }
 
 void SceneBuilder::trailDraw(RenderList& rl, const Camera& cam,
-                         const TrailState& trail, fx scrollX, uint16_t color) const {
+                             const TrailState& trail, fx scrollX, uint16_t color) const {
     if (trail.count < 2) return;
 
     int start = trail.head - trail.count;
@@ -235,7 +246,7 @@ void SceneBuilder::trailDraw(RenderList& rl, const Camera& cam,
 }
 
 void SceneBuilder::addShip(RenderList &rl, const Camera& cam, const Vec3fx &pos,
-                       uint16_t color, fx shipY, fx shipVy) const {
+                           uint16_t color, fx shipY, fx shipVy) const {
     const fx halfW = fi(kCellSize/4);
     const fx len   = fi(kCellSize) * fx::fromRatio(9, 20);
     const fx hz    = fi(kCellSize) * fx::fromRatio(3, 50);
@@ -314,7 +325,7 @@ void SceneBuilder::addCube(RenderList &rl, const Camera& cam, const Vec3fx &pos,
 }
 
 void SceneBuilder::addSquarePyramid(RenderList& rl, const Camera& cam, const Vec3fx& pos, uint16_t color,
-                                ModId mod, fx apexScale, const Vec3fx& origin) const {
+                                    ShapeMod mod, fx apexScale, const Vec3fx& origin) const {
     const Vec3fx verts[] = {
         { fi(kCellSize/2), apexScale*fi(kCellSize), fi(kCellSize/2) },
         { fx::zero(),      fx::zero(),              fi(kCellSize)   },
@@ -340,7 +351,7 @@ void SceneBuilder::addSquarePyramid(RenderList& rl, const Camera& cam, const Vec
 }
 
 void SceneBuilder::addRightTriPrism(RenderList& rl, const Camera& cam, const Vec3fx& pos, uint16_t color,
-                                ModId mod, const Vec3fx& origin) const {
+                                    ShapeMod mod, const Vec3fx& origin) const {
     const Vec3fx verts[] = {
         { fi(kCellSize), fi(kCellSize), fx::zero()    },
         { fi(kCellSize), fx::zero(),    fx::zero()    },
@@ -367,16 +378,110 @@ void SceneBuilder::addRightTriPrism(RenderList& rl, const Camera& cam, const Vec
     }
 }
 
+void SceneBuilder::addAnimatedPrimitive(RenderList& rl,
+                                        const Camera& cam,
+                                        ObstacleId sid,
+                                        ShapeMod mod,
+                                        const Vec3fx& primitiveCenter,
+                                        const Vec3fx& groupPivot,
+                                        fx groupCos,
+                                        fx groupSin,
+                                        uint16_t color) const {
+    const fx half = fi(kCellSize / 2);
+    const Vec3fx primitiveOrigin{
+        primitiveCenter.x - half,
+        primitiveCenter.y - half,
+        fx::zero()
+    };
+
+    const Vec3fx localOrigin = primitiveCenter;
+
+    auto emit = [&](Vec3fx a, Vec3fx b) {
+        applyMod3(mod, localOrigin, a);
+        applyMod3(mod, localOrigin, b);
+        rotateXYAround(a, groupPivot, groupCos, groupSin);
+        rotateXYAround(b, groupPivot, groupCos, groupSin);
+        line3(a, b, color, cam, rl);
+    };
+
+    if (sid == ObstacleId::Square) {
+        const Vec3fx verts[] = {
+            { fx::zero(),    fx::zero(),    fx::zero()    }, { fi(kCellSize), fx::zero(),    fx::zero()    },
+            { fi(kCellSize), fi(kCellSize), fx::zero()    }, { fx::zero(),    fi(kCellSize), fx::zero()    },
+            { fx::zero(),    fx::zero(),    fi(kCellSize) }, { fi(kCellSize), fx::zero(),    fi(kCellSize) },
+            { fi(kCellSize), fi(kCellSize), fi(kCellSize) }, { fx::zero(),    fi(kCellSize), fi(kCellSize) }
+        };
+
+        const int indices[] = {
+            0,1, 1,2, 2,3, 3,0,
+            4,5, 5,6, 6,7, 7,4,
+            0,4, 1,5, 2,6, 3,7
+        };
+
+        for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
+            emit(add3(primitiveOrigin, verts[indices[i]]),
+                 add3(primitiveOrigin, verts[indices[i+1]]));
+        }
+        return;
+    }
+
+    if (sid == ObstacleId::RightTri) {
+        const Vec3fx verts[] = {
+            { fi(kCellSize), fi(kCellSize), fx::zero()    },
+            { fi(kCellSize), fx::zero(),    fx::zero()    },
+            { fx::zero(),    fx::zero(),    fx::zero()    },
+            { fi(kCellSize), fi(kCellSize), fi(kCellSize) },
+            { fi(kCellSize), fx::zero(),    fi(kCellSize) },
+            { fx::zero(),    fx::zero(),    fi(kCellSize) }
+        };
+
+        const int indices[] = {
+            0,1, 1,2, 2,0,
+            3,4, 4,5, 5,3,
+            0,3, 1,4, 2,5
+        };
+
+        for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
+            emit(add3(primitiveOrigin, verts[indices[i]]),
+                 add3(primitiveOrigin, verts[indices[i+1]]));
+        }
+        return;
+    }
+
+    if (sid == ObstacleId::HalfSpike || sid == ObstacleId::FullSpike) {
+        const fx apexScale = (sid == ObstacleId::FullSpike) ? fx::one() : fx::half();
+
+        const Vec3fx verts[] = {
+            { fi(kCellSize/2), apexScale*fi(kCellSize), fi(kCellSize/2) },
+            { fx::zero(),      fx::zero(),              fi(kCellSize)   },
+            { fi(kCellSize),   fx::zero(),              fi(kCellSize)   },
+            { fi(kCellSize),   fx::zero(),              fx::zero()      },
+            { fx::zero(),      fx::zero(),              fx::zero()      }
+        };
+
+        const int indices[] = {
+            0,1, 0,2, 0,3, 0,4,
+            1,2, 2,3, 3,4, 4,1
+        };
+
+        for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
+            emit(add3(primitiveOrigin, verts[indices[i]]),
+                 add3(primitiveOrigin, verts[indices[i+1]]));
+        }
+        return;
+    }
+}
+
 void SceneBuilder::addText(RenderList& rl, const Text& text, int16_t x, int16_t y,
-                       uint16_t color, uint8_t alpha, bool inverted,
-                       uint16_t bgColor565, uint8_t styleFlags) const {
+                           uint16_t color, uint8_t alpha, bool inverted,
+                           uint16_t bgColor565, uint8_t styleFlags) const {
     if (!text.empty()) {
         rl.addText(&text, x, y, color, alpha, inverted, bgColor565, styleFlags);
     }
 }
 
 void SceneBuilder::drawExplosion(RenderList& rl, const Camera& cam,
-                             const ExplosionState& explosion, uint16_t color) const {
+                                 const ExplosionState& explosion, uint16_t color) const {
     if (!explosion.active) return;
 
     static constexpr fx kBurstTime = fx::fromRatio(3, 20);
@@ -428,12 +533,12 @@ static inline void rectWireXZ(
 }
 
 void SceneBuilder::buildScene(RenderList& rl,
-                          const Camera& cam,
-                          const Game& game,
-                          fx scrollX,
-                          TrailState& trail,
-                          const ExplosionState& explosion,
-                          const PortalRayState& portalRays) const {
+                              const Camera& cam,
+                              const Game& game,
+                              fx scrollX,
+                              TrailState& trail,
+                              const ExplosionState& explosion,
+                              const PortalRayState& portalRays) const {
     const uint16_t kWire   = 0xFFFF;
     const uint16_t kGreen  = 0x07E0;
     const uint16_t kShip   = 0xFFFF;
@@ -469,34 +574,96 @@ void SceneBuilder::buildScene(RenderList& rl,
         if (!game.readLevelColumn((uint16_t)cx, col))
             continue;
 
-        fx worldX = worldXForColumn(cx, scrollX);
+        const fx worldX = worldXForColumn(cx, scrollX);
+        const fx cellCenterX = worldX + fi(kCellSize / 2);
 
         for (int row = 0; row < kLevelHeight; ++row) {
-            ShapeId sid = col.shape(row);
-            if (sid == ShapeId::Empty) continue;
+            const ObstacleId sid = col.obstacle(row);
+            if (sid == ObstacleId::Empty) continue;
 
-            ModId mid = col.mod(row);
+            const fx worldY = worldYForRow(row);
+            const fx cellCenterY = worldY + fi(kCellSize / 2);
+            const fx cz = fx::zero();
 
-            fx worldY = worldYForRow(row);
-            fx cz = fx::zero();
+            const fx ox = worldX + fi(kCellSize/2);
+            const fx oy = worldY + fi(kCellSize/2);
 
-            fx ox = worldX + fi(kCellSize/2);
-            fx oy = worldY + fi(kCellSize/2);
+            if (is_anim_group(sid)) {
+                const uint8_t defIndex = anim_group_index(sid);
+                if (defIndex >= game.animGroupDefs().size()) {
+                    continue;
+                }
+
+                const AnimGroupOffsetMod gm = col.groupMod(row);
+
+                fx anchorX = cellCenterX;
+                fx anchorY = cellCenterY;
+
+                const fx halfCell = fi(kCellSize / 2);
+
+                if (gm == AnimGroupOffsetMod::ShiftRight) {
+                    anchorX = anchorX + halfCell;
+                } else if (gm == AnimGroupOffsetMod::ShiftDown) {
+                    anchorY = anchorY - halfCell;
+                } else if (gm == AnimGroupOffsetMod::ShiftDownRight) {
+                    anchorX = anchorX + halfCell;
+                    anchorY = anchorY - halfCell;
+                }
+
+                const LoadedAnimGroupDef& def = game.animGroupDefs()[defIndex];
+                const fx angleTurns = game.animGroupAngleTurns(defIndex);
+
+                fx groupCos = fx::one();
+                fx groupSin = fx::zero();
+                turnsToSinCos(angleTurns, groupCos, groupSin);
+
+                const Vec3fx groupPivot{
+                    anchorX + gv::mulInt(halfCell, def.hdr.pivotHx),
+                    anchorY - gv::mulInt(halfCell, def.hdr.pivotHy),
+                    fi(kCellSize / 2)
+                };
+
+                for (uint8_t i = 0; i < def.hdr.primitiveCount; ++i) {
+                    const AnimPrimitiveDef& p = game.animPrimitives()[def.firstPrimitive + i];
+
+                    const Vec3fx primitiveCenter{
+                        anchorX + gv::mulInt(halfCell, p.hx),
+                        anchorY - gv::mulInt(halfCell, p.hy),
+                        fi(kCellSize / 2)
+                    };
+
+                    addAnimatedPrimitive(
+                        rl,
+                        cam,
+                        p.obstacle,
+                        p.mod,
+                        primitiveCenter,
+                        groupPivot,
+                        groupCos,
+                        groupSin,
+                        kGreen
+                    );
+                }
+
+                continue;
+            }
+
+            const ShapeMod mid = col.shapeMod(row);
 
             switch (sid) {
-                case ShapeId::Square:
+                case ObstacleId::Square:
                     addCube(rl, cam, {worldX, worldY, cz}, kGreen);
                     break;
 
-                case ShapeId::RightTri:
+                case ObstacleId::RightTri:
                     addRightTriPrism(rl, cam, {worldX, worldY, cz}, kGreen, mid, {ox, oy, cz});
                     break;
 
-                case ShapeId::HalfSpike:
+                case ObstacleId::HalfSpike:
                     addSquarePyramid(rl, cam, {worldX, worldY, cz}, kGreen, mid, fx::half(), {ox, oy, cz});
                     break;
 
-                case ShapeId::FullSpike:
+                case ObstacleId::FullSpike:
                     addSquarePyramid(rl, cam, {worldX, worldY, cz}, kGreen, mid, fx::one(), {ox, oy, cz});
                     break;
 
@@ -508,7 +675,7 @@ void SceneBuilder::buildScene(RenderList& rl,
 
     const LevelHeader& h = game.levelHeader();
     const int portalCol = portal_abs_x(h);
-    const int py = (int)h.portalY;
+    const int py = 4;
 
     if (portalCol >= col0 && portalCol < col1) {
         const fx px = worldXForColumn(portalCol, scrollX);

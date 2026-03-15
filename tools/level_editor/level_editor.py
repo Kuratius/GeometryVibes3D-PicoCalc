@@ -656,6 +656,8 @@ class EditorApp:
         self.level = Level(DEFAULT_W)
         self.current_file_path: Optional[str] = None
         self.is_dirty = False
+        self._history_revision = 0
+        self._saved_revision = 0
 
         self.width_var = tk.IntVar(value=self.level.width)
         self.paint_mode_var = tk.StringVar(value=PAINT_MODE_PRIMITIVE)
@@ -675,6 +677,7 @@ class EditorApp:
         self._clipboard: Optional[Dict[str, Any]] = None
 
         self._undo: List[UndoAction] = []
+        self._redo: List[UndoAction] = []
         self._txn_active = False
         self._txn_before_cells: Dict[str, Optional[CellValue]] = {}
         self._txn_after_cells: Dict[str, Optional[CellValue]] = {}
@@ -895,6 +898,7 @@ class EditorApp:
                       "• Ctrl+X: cut\n"
                       "• Ctrl+V: paste at mouse\n"
                       "• Ctrl+Z: undo\n"
+                      "• Ctrl+Y: redo\n"
                       "• Right-drag: erase\n"
                       "• Mouse wheel: scroll horizontally\n"
                       "• Endcap zone (last 6 cols) is locked",
@@ -947,6 +951,7 @@ class EditorApp:
         self.root.bind_all("<Control-x>", lambda e: self.cut_selection())
         self.root.bind_all("<Control-v>", lambda e: self.paste_clipboard())
         self.root.bind_all("<Control-z>", lambda e: self.undo())
+        self.root.bind_all("<Control-y>", lambda e: self.redo())
         self.root.bind_all("<Escape>", lambda e: self.clear_selection())
 
         self.root.bind_all("<Control-o>", lambda e: self.open_json())
@@ -1327,6 +1332,19 @@ class EditorApp:
 
     # -------- Undo plumbing --------
 
+    def refresh_dirty_from_history(self) -> None:
+        self.is_dirty = (self._history_revision != self._saved_revision)
+        self._update_window_title()
+
+    def reset_undo_state(self) -> None:
+        self._undo.clear()
+        self._redo.clear()
+        self._txn_active = False
+        self._txn_before_cells.clear()
+        self._txn_after_cells.clear()
+        self._txn_before_width = self.level.width
+        self._txn_before_anim_defs = list(self.level.anim_defs)
+
     def begin_txn(self) -> None:
         if self._txn_active:
             return
@@ -1391,21 +1409,67 @@ class EditorApp:
             return
 
         self._undo.append(act)
+        self._redo.clear()
         self._txn_active = False
-        self.mark_dirty()
+        self._history_revision += 1
+        self.refresh_dirty_from_history()
 
     def undo(self) -> None:
         if not self._undo:
             return
+
         act = self._undo.pop()
+        self._redo.append(act)
+        self._history_revision -= 1
+        self.refresh_dirty_from_history()
 
         self.level.resize_width(act.before_width)
+
+        for k, prev in act.before_cells.items():
+            xs, ys = k.split(",")
+            x, y = int(xs), int(ys)
+
+            if not self.level.in_bounds(x, y):
+                continue
+
+            if prev is None:
+                self.level.cells.pop(k, None)
+            else:
+                self.level.cells[k] = prev
+
         self.level.anim_defs = list(act.before_anim_defs)
 
-        self.level.cells.clear()
-        for k, prev in act.before_cells.items():
-            if prev is not None:
-                self.level.cells[k] = prev
+        self.level.strip_endcap_from_authored()
+
+        self.width_var.set(self.level.width)
+        self._rebuild_canvas_region()
+        self.redraw_all()
+        self._refresh_animation_ui()
+
+    def redo(self) -> None:
+        if not self._redo:
+            return
+
+        act = self._redo.pop()
+        self._undo.append(act)
+        self._history_revision += 1
+        self.refresh_dirty_from_history()
+
+        self.level.resize_width(act.after_width)
+
+        for k, after in act.after_cells.items():
+            xs, ys = k.split(",")
+            x, y = int(xs), int(ys)
+
+            if not self.level.in_bounds(x, y):
+                continue
+
+            if after is None:
+                self.level.cells.pop(k, None)
+            else:
+                self.level.cells[k] = after
+
+        self.level.anim_defs = list(act.after_anim_defs)
 
         self.level.strip_endcap_from_authored()
 
@@ -2097,8 +2161,8 @@ class EditorApp:
             json.dump(data, f, indent=2)
 
         self.current_file_path = path
-        self.is_dirty = False
-        self._update_window_title()
+        self._saved_revision = self._history_revision
+        self.refresh_dirty_from_history()
 
     def save_json(self) -> None:
         if not self.current_file_path:
@@ -2137,13 +2201,15 @@ class EditorApp:
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
             self.level = Level.from_json_obj(obj)
-            self.current_file_path = path
+            self.reset_undo_state()
             self.width_var.set(self.level.width)
             self._rebuild_canvas_region()
             self.redraw_all()
             self._refresh_animation_ui()
-            self.is_dirty = False
-            self._update_window_title()
+            self.current_file_path = path
+            self._history_revision = 0
+            self._saved_revision = 0
+            self.refresh_dirty_from_history()
         except Exception as ex:
             messagebox.showerror("Import failed", str(ex))
 
@@ -2151,14 +2217,16 @@ class EditorApp:
         if not messagebox.askyesno("New", "Clear the level?"):
             return
         self.level = Level(width=DEFAULT_W)
+        self.reset_undo_state()
         self.selected_anim_slot = None
-        self.current_file_path = None
         self.width_var.set(self.level.width)
         self._rebuild_canvas_region()
         self.redraw_all()
         self._refresh_animation_ui()
-        self.is_dirty = False
-        self._update_window_title()
+        self.current_file_path = None
+        self._history_revision = 0
+        self._saved_revision = 0
+        self.refresh_dirty_from_history()
 
 # -----------------------------
 # Main

@@ -1,4 +1,5 @@
 #include "SceneBuilder.hpp"
+#include "ShapeGeometry.hpp"
 #include "Game.hpp"
 #include "Hud.hpp"
 #include "Playfield.hpp"
@@ -51,6 +52,45 @@ static inline void rotateXYAround(Vec3fx& p, const Vec3fx& pivot, fx c, fx s) {
     const fx dy = p.y - pivot.y;
     p.x = pivot.x + dx * c - dy * s;
     p.y = pivot.y + dx * s + dy * c;
+}
+
+static inline void transformEdgePoint(Vec3fx& p,
+                                      const Vec3fx& translate,
+                                      ShapeMod mod,
+                                      const Vec3fx* modOrigin,
+                                      const Vec3fx* rotatePivot,
+                                      fx rotateCos,
+                                      fx rotateSin) {
+    p = add3(p, translate);
+
+    if (modOrigin) {
+        applyMod3(mod, *modOrigin, p);
+    }
+
+    if (rotatePivot) {
+        rotateXYAround(p, *rotatePivot, rotateCos, rotateSin);
+    }
+}
+
+static inline void drawTransformedEdges(RenderList& rl,
+                                        const Camera& cam,
+                                        const EdgeBuffer<16>& edges,
+                                        const Vec3fx& translate,
+                                        ShapeMod mod,
+                                        const Vec3fx* modOrigin,
+                                        const Vec3fx* rotatePivot,
+                                        fx rotateCos,
+                                        fx rotateSin,
+                                        uint16_t color) {
+    for (std::size_t i = 0; i < edges.count; ++i) {
+        Vec3fx a = edges.edges[i].a;
+        Vec3fx b = edges.edges[i].b;
+
+        transformEdgePoint(a, translate, mod, modOrigin, rotatePivot, rotateCos, rotateSin);
+        transformEdgePoint(b, translate, mod, modOrigin, rotatePivot, rotateCos, rotateSin);
+
+        line3(a, b, color, cam, rl);
+    }
 }
 
 void SceneBuilder::updateExplosion(ExplosionState& explosion, fx dt) const {
@@ -304,78 +344,56 @@ void SceneBuilder::addShip(RenderList &rl, const Camera& cam, const Vec3fx &pos,
 }
 
 void SceneBuilder::addCube(RenderList &rl, const Camera& cam, const Vec3fx &pos, uint16_t color) const {
-    const Vec3fx verts[] = {
-        { fx::zero(),    fx::zero(),    fx::zero()    }, { fi(kCellSize), fx::zero(),    fx::zero()    },
-        { fi(kCellSize), fi(kCellSize), fx::zero()    }, { fx::zero(),    fi(kCellSize), fx::zero()    },
-        { fx::zero(),    fx::zero(),    fi(kCellSize) }, { fi(kCellSize), fx::zero(),    fi(kCellSize) },
-        { fi(kCellSize), fi(kCellSize), fi(kCellSize) }, { fx::zero(),    fi(kCellSize), fi(kCellSize) }
-    };
-
-    const int indices[] = {
-        0,1, 1,2, 2,3, 3,0,
-        4,5, 5,6, 6,7, 7,4,
-        0,4, 1,5, 2,6, 3,7
-    };
-
-    for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
-        Vec3fx vA = add3(pos, verts[indices[i]]);
-        Vec3fx vB = add3(pos, verts[indices[i+1]]);
-        line3(vA, vB, color, cam, rl);
-    }
+    EdgeBuffer<16> edges{};
+    buildCubeLocal(edges);
+    drawTransformedEdges(
+        rl,
+        cam,
+        edges,
+        pos,
+        ShapeMod::None,
+        nullptr,
+        nullptr,
+        fx::one(),
+        fx::zero(),
+        color
+    );
 }
 
 void SceneBuilder::addSquarePyramid(RenderList& rl, const Camera& cam, const Vec3fx& pos, uint16_t color,
                                     ShapeMod mod, fx apexScale, const Vec3fx& origin) const {
-    const Vec3fx verts[] = {
-        { fi(kCellSize/2), apexScale*fi(kCellSize), fi(kCellSize/2) },
-        { fx::zero(),      fx::zero(),              fi(kCellSize)   },
-        { fi(kCellSize),   fx::zero(),              fi(kCellSize)   },
-        { fi(kCellSize),   fx::zero(),              fx::zero()      },
-        { fx::zero(),      fx::zero(),              fx::zero()      }
-    };
-
-    const int indices[] = {
-        0,1, 0,2, 0,3, 0,4,
-        1,2, 2,3, 3,4, 4,1
-    };
-
-    for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
-        Vec3fx vA = add3(pos, verts[indices[i]]);
-        Vec3fx vB = add3(pos, verts[indices[i+1]]);
-
-        applyMod3(mod, origin, vA);
-        applyMod3(mod, origin, vB);
-
-        line3(vA, vB, color, cam, rl);
-    }
+    EdgeBuffer<16> edges{};
+    buildSquarePyramidLocal(edges, apexScale);
+    drawTransformedEdges(
+        rl,
+        cam,
+        edges,
+        pos,
+        mod,
+        &origin,
+        nullptr,
+        fx::one(),
+        fx::zero(),
+        color
+    );
 }
 
 void SceneBuilder::addRightTriPrism(RenderList& rl, const Camera& cam, const Vec3fx& pos, uint16_t color,
                                     ShapeMod mod, const Vec3fx& origin) const {
-    const Vec3fx verts[] = {
-        { fi(kCellSize), fi(kCellSize), fx::zero()    },
-        { fi(kCellSize), fx::zero(),    fx::zero()    },
-        { fx::zero(),    fx::zero(),    fx::zero()    },
-        { fi(kCellSize), fi(kCellSize), fi(kCellSize) },
-        { fi(kCellSize), fx::zero(),    fi(kCellSize) },
-        { fx::zero(),    fx::zero(),    fi(kCellSize) }
-    };
-
-    const int indices[] = {
-        0,1, 1,2, 2,0,
-        3,4, 4,5, 5,3,
-        0,3, 1,4, 2,5
-    };
-
-    for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
-        Vec3fx vA = add3(pos, verts[indices[i]]);
-        Vec3fx vB = add3(pos, verts[indices[i+1]]);
-
-        applyMod3(mod, origin, vA);
-        applyMod3(mod, origin, vB);
-
-        line3(vA, vB, color, cam, rl);
-    }
+    EdgeBuffer<16> edges{};
+    buildRightTriPrismLocal(edges);
+    drawTransformedEdges(
+        rl,
+        cam,
+        edges,
+        pos,
+        mod,
+        &origin,
+        nullptr,
+        fx::one(),
+        fx::zero(),
+        color
+    );
 }
 
 void SceneBuilder::addAnimatedPrimitive(RenderList& rl,
@@ -387,6 +405,13 @@ void SceneBuilder::addAnimatedPrimitive(RenderList& rl,
                                         fx groupCos,
                                         fx groupSin,
                                         uint16_t color) const {
+    if (sid != ObstacleId::Square &&
+        sid != ObstacleId::RightTri &&
+        sid != ObstacleId::HalfSpike &&
+        sid != ObstacleId::FullSpike) {
+        return;
+    }
+
     const fx half = fi(kCellSize / 2);
     const Vec3fx primitiveOrigin{
         primitiveCenter.x - half,
@@ -394,82 +419,21 @@ void SceneBuilder::addAnimatedPrimitive(RenderList& rl,
         fx::zero()
     };
 
-    const Vec3fx localOrigin = primitiveCenter;
+    EdgeBuffer<16> edges{};
+    buildPrimitiveLocal(edges, sid);
 
-    auto emit = [&](Vec3fx a, Vec3fx b) {
-        applyMod3(mod, localOrigin, a);
-        applyMod3(mod, localOrigin, b);
-        rotateXYAround(a, groupPivot, groupCos, groupSin);
-        rotateXYAround(b, groupPivot, groupCos, groupSin);
-        line3(a, b, color, cam, rl);
-    };
-
-    if (sid == ObstacleId::Square) {
-        const Vec3fx verts[] = {
-            { fx::zero(),    fx::zero(),    fx::zero()    }, { fi(kCellSize), fx::zero(),    fx::zero()    },
-            { fi(kCellSize), fi(kCellSize), fx::zero()    }, { fx::zero(),    fi(kCellSize), fx::zero()    },
-            { fx::zero(),    fx::zero(),    fi(kCellSize) }, { fi(kCellSize), fx::zero(),    fi(kCellSize) },
-            { fi(kCellSize), fi(kCellSize), fi(kCellSize) }, { fx::zero(),    fi(kCellSize), fi(kCellSize) }
-        };
-
-        const int indices[] = {
-            0,1, 1,2, 2,3, 3,0,
-            4,5, 5,6, 6,7, 7,4,
-            0,4, 1,5, 2,6, 3,7
-        };
-
-        for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
-            emit(add3(primitiveOrigin, verts[indices[i]]),
-                 add3(primitiveOrigin, verts[indices[i+1]]));
-        }
-        return;
-    }
-
-    if (sid == ObstacleId::RightTri) {
-        const Vec3fx verts[] = {
-            { fi(kCellSize), fi(kCellSize), fx::zero()    },
-            { fi(kCellSize), fx::zero(),    fx::zero()    },
-            { fx::zero(),    fx::zero(),    fx::zero()    },
-            { fi(kCellSize), fi(kCellSize), fi(kCellSize) },
-            { fi(kCellSize), fx::zero(),    fi(kCellSize) },
-            { fx::zero(),    fx::zero(),    fi(kCellSize) }
-        };
-
-        const int indices[] = {
-            0,1, 1,2, 2,0,
-            3,4, 4,5, 5,3,
-            0,3, 1,4, 2,5
-        };
-
-        for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
-            emit(add3(primitiveOrigin, verts[indices[i]]),
-                 add3(primitiveOrigin, verts[indices[i+1]]));
-        }
-        return;
-    }
-
-    if (sid == ObstacleId::HalfSpike || sid == ObstacleId::FullSpike) {
-        const fx apexScale = (sid == ObstacleId::FullSpike) ? fx::one() : fx::half();
-
-        const Vec3fx verts[] = {
-            { fi(kCellSize/2), apexScale*fi(kCellSize), fi(kCellSize/2) },
-            { fx::zero(),      fx::zero(),              fi(kCellSize)   },
-            { fi(kCellSize),   fx::zero(),              fi(kCellSize)   },
-            { fi(kCellSize),   fx::zero(),              fx::zero()      },
-            { fx::zero(),      fx::zero(),              fx::zero()      }
-        };
-
-        const int indices[] = {
-            0,1, 0,2, 0,3, 0,4,
-            1,2, 2,3, 3,4, 4,1
-        };
-
-        for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
-            emit(add3(primitiveOrigin, verts[indices[i]]),
-                 add3(primitiveOrigin, verts[indices[i+1]]));
-        }
-        return;
-    }
+    drawTransformedEdges(
+        rl,
+        cam,
+        edges,
+        primitiveOrigin,
+        mod,
+        &primitiveCenter,
+        &groupPivot,
+        groupCos,
+        groupSin,
+        color
+    );
 }
 
 void SceneBuilder::addText(RenderList& rl, const Text& text, int16_t x, int16_t y,

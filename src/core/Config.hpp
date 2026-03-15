@@ -13,7 +13,7 @@ constexpr int kStartRow = 1;
 constexpr int kShipFixedX = 40; // keep the ship fixed at this world-space X.
 
 // ---- Game tuning ----
-constexpr fx kScrollSpeed      = fx::fromInt(90);
+constexpr fx kScrollSpeed      = fx::fromInt(100);
 constexpr fx kFlyOutSpeed      = fx::fromInt(120);
 
 constexpr fx kFlyOutCells      = fx::fromInt(16 * kCellSize);

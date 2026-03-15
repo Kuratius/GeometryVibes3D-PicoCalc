@@ -3149,18 +3149,8 @@
         },
         {
           "kind": "rotate",
-          "deltaQTurns": 1,
-          "durationMs": 83
-        },
-        {
-          "kind": "rotate",
-          "deltaQTurns": 1,
-          "durationMs": 83
-        },
-        {
-          "kind": "rotate",
-          "deltaQTurns": 1,
-          "durationMs": 83
+          "deltaQTurns": 3,
+          "durationMs": 250
         },
         {
           "kind": "hold",

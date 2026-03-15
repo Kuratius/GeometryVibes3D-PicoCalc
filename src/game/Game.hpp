@@ -23,6 +23,30 @@ enum class RunState : uint8_t {
     Dead
 };
 
+#ifdef GV3D_TESTING
+struct CollisionDebugPrimitive {
+    ObstacleId sid = ObstacleId::Empty;
+    ShapeMod mod = ShapeMod::None;
+
+    fx worldOriginX{};
+    fx worldOriginY{};
+    fx worldOriginZ{};
+
+    fx primitiveCenterX{};
+    fx primitiveCenterY{};
+    fx primitiveCenterZ{};
+
+    bool animated = false;
+
+    fx groupPivotX{};
+    fx groupPivotY{};
+    fx groupPivotZ{};
+
+    fx groupCos = fx::one();
+    fx groupSin = fx::zero();
+};
+#endif
+
 struct LoadedAnimGroupDef {
     AnimGroupDefHeader hdr{};
     uint16_t firstPrimitive = 0;
@@ -65,6 +89,18 @@ public:
     bool collided() const { return hit; }
     void clearCollision() { hit = false; }
 
+#ifdef GV3D_TESTING
+    static constexpr std::size_t kCollisionDebugCap = 128;
+
+    const StaticVector<CollisionDebugPrimitive, kCollisionDebugCap>& collisionDebugPrimitives() const {
+        return collisionDebugPrimitives_;
+    }
+
+    void clearCollisionDebugPrimitives() const {
+        collisionDebugPrimitives_.clear();
+    }
+#endif
+
     int progressPercent() const;
 
     Hud& hud() { return hud_; }
@@ -86,7 +122,7 @@ private:
 
     bool checkPortalReached(fx shipY) const;
     bool checkCollisionAt(fx shipY) const;
-    static bool collideCell(ObstacleId sid, ShapeMod mid, fx lx, fx ly, fx lz, fx r);
+    static bool collideCell(ObstacleId sid, ShapeMod mid, fx lx, fx ly, fx shipVy);
 
 private:
     ShipState shipState{};
@@ -108,6 +144,10 @@ private:
 
     uint32_t animTimeMs_ = 0;
     std::array<fx, kMaxAnimGroupDefs> animGroupAngleTurns_{};
+
+#ifdef GV3D_TESTING
+    mutable StaticVector<CollisionDebugPrimitive, kCollisionDebugCap> collisionDebugPrimitives_{};
+#endif
 };
 
 } // namespace gv

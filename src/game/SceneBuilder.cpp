@@ -285,6 +285,52 @@ void SceneBuilder::trailDraw(RenderList& rl, const Camera& cam,
     }
 }
 
+#ifdef GV3D_TESTING
+void SceneBuilder::buildCollisionDebug(RenderList& rl, const Camera& cam, const Game& game) const {
+    static constexpr uint16_t kCollisionDebug = 0xF800; // red
+
+    for (const auto& p : game.collisionDebugPrimitives()) {
+        if (p.animated) {
+            addAnimatedPrimitive(
+                rl,
+                cam,
+                p.sid,
+                p.mod,
+                Vec3fx{ p.primitiveCenterX, p.primitiveCenterY, p.primitiveCenterZ },
+                Vec3fx{ p.groupPivotX, p.groupPivotY, p.groupPivotZ },
+                p.groupCos,
+                p.groupSin,
+                kCollisionDebug
+            );
+        } else {
+            const Vec3fx worldOrigin{ p.worldOriginX, p.worldOriginY, p.worldOriginZ };
+            const Vec3fx primitiveCenter{ p.primitiveCenterX, p.primitiveCenterY, p.primitiveCenterZ };
+
+            switch (p.sid) {
+                case ObstacleId::Square:
+                    addCube(rl, cam, worldOrigin, kCollisionDebug);
+                    break;
+
+                case ObstacleId::RightTri:
+                    addRightTriPrism(rl, cam, worldOrigin, kCollisionDebug, p.mod, primitiveCenter);
+                    break;
+
+                case ObstacleId::HalfSpike:
+                    addSquarePyramid(rl, cam, worldOrigin, kCollisionDebug, p.mod, fx::half(), primitiveCenter);
+                    break;
+
+                case ObstacleId::FullSpike:
+                    addSquarePyramid(rl, cam, worldOrigin, kCollisionDebug, p.mod, fx::one(), primitiveCenter);
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+}
+#endif
+
 void SceneBuilder::addShip(RenderList &rl, const Camera& cam, const Vec3fx &pos,
                            uint16_t color, fx shipY, fx shipVy) const {
     const fx halfW = fi(kCellSize/4);
@@ -655,6 +701,10 @@ void SceneBuilder::buildScene(RenderList& rl,
         }
         drawPortalRays(rl, cam, game, scrollX, portalRays, kWire);
     }
+
+#ifdef GV3D_TESTING
+    buildCollisionDebug(rl, cam, game);
+#endif
 
     const Vec3fx shipPos{ game.shipRenderX(), game.ship().y, fi(kCellSize/2) };
 

@@ -22,18 +22,29 @@ static inline fx worldYForRow(int row) {
     return playCenterY() + playHalfH() - cellH - mulInt(cellH, row);
 }
 
-// This is the "topStart" used by our inverse mapping in collision:
-// it's the world Y origin of row 0.
-static inline fx topStartY() {
-    return (playCenterY() + playHalfH()) - cellSizeFx();
+static inline fx topEdgeY() {
+    return playCenterY() + playHalfH();
 }
 
 // Invert worldYForRow() so we can get row index for a given world Y.
 // Clamp the result into 0..kLevelHeight-1.
+//
+// Cells occupy:
+//   row 0: [topEdgeY() - 1*cellH, topEdgeY()]
+//   row 1: [topEdgeY() - 2*cellH, topEdgeY() - 1*cellH]
+// etc.
+//
+// We therefore map from the top edge of the playfield, not from the
+// origin of row 0.
 static inline int rowFromWorldY(fx wy) {
-    const fx cellH = cellSizeFx();
-    const fx topStart = topStartY();
-    int row = (topStart - wy).toInt() / kCellSize;
+    const int rawDist = (topEdgeY() - wy).raw();
+    const int rawCell = fx::fromInt(kCellSize).raw();
+
+    int row = rawDist / rawCell;
+    if ((rawDist < 0) && (rawDist % rawCell)) {
+        --row; // force floor division for negatives
+    }
+
     if (row < 0) row = 0;
     if (row > (kLevelHeight - 1)) row = (kLevelHeight - 1);
     return row;

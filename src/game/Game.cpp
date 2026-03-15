@@ -14,9 +14,6 @@ static constexpr const char* kControlsHintContinue = "CONTINUE[SPACE]";
 
 static inline int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
-static inline gv::fx shipWorldZ() { return gv::fx::fromInt(gv::kCellSize / 2); }
-static inline gv::fx shipRadius() { return gv::fx::fromInt(gv::kCellSize / 4); }
-
 static inline gv::fx halfCellFx() { return gv::fx::fromInt(gv::kCellSize / 2); }
 
 static inline void applyGroupOffsetToAnchor(gv::AnimGroupOffsetMod gm, gv::fx& anchorX, gv::fx& anchorY) {
@@ -84,8 +81,6 @@ static inline int computeAnimSearchPadCells(const gv::Game& game) {
                 const double dist = std::sqrt(double(dx * dx + dy * dy));
                 const int distCeil = int(std::ceil(dist));
 
-                // Include anchor->pivot offset implicitly by measuring from pivot-centered primitive geometry,
-                // then add a small extra cell for safety.
                 if (distCeil > maxRadiusHalfCells) {
                     maxRadiusHalfCells = distCeil;
                 }
@@ -95,6 +90,222 @@ static inline int computeAnimSearchPadCells(const gv::Game& game) {
 
     // half-cells -> cells, with a bit of extra slack
     return (maxRadiusHalfCells + 1) / 2 + 1;
+}
+
+// -----------------------------
+// 2D narrow-phase helpers
+// -----------------------------
+
+struct Pt2fx {
+    gv::fx x{};
+    gv::fx y{};
+};
+
+struct Poly2fx {
+    Pt2fx v[4]{};
+    int count = 0;
+};
+
+static inline gv::fx cross2(const Pt2fx& a, const Pt2fx& b, const Pt2fx& c) {
+    const gv::fx abx = b.x - a.x;
+    const gv::fx aby = b.y - a.y;
+    const gv::fx acx = c.x - a.x;
+    const gv::fx acy = c.y - a.y;
+    return abx * acy - aby * acx;
+}
+
+static inline bool onSegment(const Pt2fx& a, const Pt2fx& b, const Pt2fx& p) {
+    const gv::fx minX = gv::min(a.x, b.x);
+    const gv::fx maxX = gv::max(a.x, b.x);
+    const gv::fx minY = gv::min(a.y, b.y);
+    const gv::fx maxY = gv::max(a.y, b.y);
+
+    return (p.x >= minX && p.x <= maxX &&
+            p.y >= minY && p.y <= maxY);
+}
+
+static inline int orientSign(const Pt2fx& a, const Pt2fx& b, const Pt2fx& c) {
+    const gv::fx cr = cross2(a, b, c);
+    if (cr.raw() > 0) return 1;
+    if (cr.raw() < 0) return -1;
+    return 0;
+}
+
+static inline bool segmentsIntersect(const Pt2fx& a, const Pt2fx& b,
+                                     const Pt2fx& c, const Pt2fx& d) {
+    const int o1 = orientSign(a, b, c);
+    const int o2 = orientSign(a, b, d);
+    const int o3 = orientSign(c, d, a);
+    const int o4 = orientSign(c, d, b);
+
+    if (o1 != o2 && o3 != o4) {
+        return true;
+    }
+
+    if (o1 == 0 && onSegment(a, b, c)) return true;
+    if (o2 == 0 && onSegment(a, b, d)) return true;
+    if (o3 == 0 && onSegment(c, d, a)) return true;
+    if (o4 == 0 && onSegment(c, d, b)) return true;
+
+    return false;
+}
+
+static inline bool pointInConvexPoly(const Pt2fx& p, const Poly2fx& poly) {
+    bool sawPos = false;
+    bool sawNeg = false;
+
+    for (int i = 0; i < poly.count; ++i) {
+        const Pt2fx& a = poly.v[i];
+        const Pt2fx& b = poly.v[(i + 1) % poly.count];
+        const gv::fx cr = cross2(a, b, p);
+
+        if (cr.raw() > 0) sawPos = true;
+        if (cr.raw() < 0) sawNeg = true;
+
+        if (sawPos && sawNeg) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static inline bool convexPolysOverlap(const Poly2fx& a, const Poly2fx& b) {
+    // Edge-edge intersections
+    for (int i = 0; i < a.count; ++i) {
+        const Pt2fx& a0 = a.v[i];
+        const Pt2fx& a1 = a.v[(i + 1) % a.count];
+
+        for (int j = 0; j < b.count; ++j) {
+            const Pt2fx& b0 = b.v[j];
+            const Pt2fx& b1 = b.v[(j + 1) % b.count];
+
+            if (segmentsIntersect(a0, a1, b0, b1)) {
+                return true;
+            }
+        }
+    }
+
+    // Full containment either way
+    if (pointInConvexPoly(a.v[0], b)) return true;
+    if (pointInConvexPoly(b.v[0], a)) return true;
+
+    return false;
+}
+
+static inline void rotatePointAround(Pt2fx& p, gv::fx ox, gv::fx oy, gv::fx c, gv::fx s) {
+    const gv::fx dx = p.x - ox;
+    const gv::fx dy = p.y - oy;
+    p.x = ox + dx * c - dy * s;
+    p.y = oy + dx * s + dy * c;
+}
+
+static inline void applyShapeModForward(Pt2fx& p, gv::ShapeMod mod, gv::fx ox, gv::fx oy) {
+    gv::fx dx = p.x - ox;
+    gv::fx dy = p.y - oy;
+
+    switch (mod) {
+        case gv::ShapeMod::None:
+            break;
+
+        case gv::ShapeMod::RotLeft: {
+            gv::fx ndx = -dy;
+            gv::fx ndy =  dx;
+            dx = ndx;
+            dy = ndy;
+        } break;
+
+        case gv::ShapeMod::RotRight: {
+            gv::fx ndx =  dy;
+            gv::fx ndy = -dx;
+            dx = ndx;
+            dy = ndy;
+        } break;
+
+        case gv::ShapeMod::Invert:
+            dx = -dx;
+            dy = -dy;
+            break;
+    }
+
+    p.x = ox + dx;
+    p.y = oy + dy;
+}
+
+static inline void buildPrimitivePoly2D(gv::ObstacleId sid, gv::ShapeMod mod, Poly2fx& poly) {
+    using gv::fx;
+    const fx k = fx::fromInt(gv::kCellSize);
+    const fx half = fx::fromInt(gv::kCellSize / 2);
+
+    poly.count = 0;
+
+    switch (sid) {
+        case gv::ObstacleId::Square:
+            poly.count = 4;
+            poly.v[0] = { fx::zero(), fx::zero() };
+            poly.v[1] = { k,          fx::zero() };
+            poly.v[2] = { k,          k };
+            poly.v[3] = { fx::zero(), k };
+            break;
+
+        case gv::ObstacleId::RightTri:
+            poly.count = 3;
+            poly.v[0] = { fx::zero(), fx::zero() };
+            poly.v[1] = { k,          fx::zero() };
+            poly.v[2] = { k,          k };
+            break;
+
+        case gv::ObstacleId::HalfSpike:
+            poly.count = 3;
+            poly.v[0] = { fx::zero(), fx::zero() };
+            poly.v[1] = { k,          fx::zero() };
+            poly.v[2] = { half,       half };
+            break;
+
+        case gv::ObstacleId::FullSpike:
+            poly.count = 3;
+            poly.v[0] = { fx::zero(), fx::zero() };
+            poly.v[1] = { k,          fx::zero() };
+            poly.v[2] = { half,       k };
+            break;
+
+        default:
+            return;
+    }
+
+    for (int i = 0; i < poly.count; ++i) {
+        applyShapeModForward(poly.v[i], mod, half, half);
+    }
+}
+
+static inline void buildShipPoly2D(gv::fx shipCenterX, gv::fx shipCenterY, gv::fx shipVy, Poly2fx& poly) {
+    using gv::fx;
+    const fx halfW = fx::fromInt(gv::kCellSize / 4);
+    const fx len   = fx::fromInt(gv::kCellSize) * fx::fromRatio(9, 20);
+
+    poly.count = 3;
+
+    // Canonical ship triangle in XY, matching SceneBuilder::addShip().
+    poly.v[0] = { shipCenterX + len, shipCenterY };
+    poly.v[1] = { shipCenterX - len, shipCenterY + halfW };
+    poly.v[2] = { shipCenterX - len, shipCenterY - halfW };
+
+    gv::fx c = fx::one();
+    gv::fx s = fx::zero();
+
+    if (shipVy.raw() > 0) {
+        constexpr fx cos45 = fx::fromRaw(46341);
+        c = cos45;
+        s = cos45;
+    } else if (shipVy.raw() < 0) {
+        constexpr fx cos45 = fx::fromRaw(46341);
+        c = cos45;
+        s = -cos45;
+    }
+
+    for (int i = 0; i < poly.count; ++i) {
+        rotatePointAround(poly.v[i], shipCenterX, shipCenterY, c, s);
+    }
 }
 
 } // anon
@@ -209,6 +420,10 @@ void Game::reset() {
     hud_.clear();
     hud_.setControlsHint(kControlsHintStart);
     unloadLevel();
+
+#ifdef GV3D_TESTING
+    collisionDebugPrimitives_.clear();
+#endif
 }
 
 bool Game::loadAnimDefs() {
@@ -391,6 +606,10 @@ void Game::unloadLevel() {
     }
     std::memset(&levelHdr, 0, sizeof(levelHdr));
     clearAnimDefs();
+
+#ifdef GV3D_TESTING
+    collisionDebugPrimitives_.clear();
+#endif
 }
 
 bool Game::readLevelColumn(uint16_t i, Column56& out) const {
@@ -499,8 +718,11 @@ void Game::resume() {
 bool Game::checkCollisionAt(fx shipY) const {
     const fx sy = shipY;
     const fx sx = fx::fromInt(kShipFixedX);
-    const fx sz = shipWorldZ();
-    const fx r  = shipRadius();
+    const fx r = fx::fromInt(kCellSize / 4);
+
+#ifdef GV3D_TESTING
+    collisionDebugPrimitives_.clear();
+#endif
 
     // ---- Static obstacle neighborhood ----
     const fx x0 = xScroll - r;
@@ -592,10 +814,29 @@ bool Game::checkCollisionAt(fx shipY) const {
                     const fx primOriginX = primCenterX - halfCellFx();
                     const fx primOriginY = primCenterY - halfCellFx();
 
+#ifdef GV3D_TESTING
+                    (void)collisionDebugPrimitives_.push_back(CollisionDebugPrimitive{
+                        p.obstacle,
+                        p.mod,
+                        primOriginX,
+                        primOriginY,
+                        fx::zero(),
+                        primCenterX,
+                        primCenterY,
+                        fx::fromInt(kCellSize / 2),
+                        true,
+                        groupPivotX,
+                        groupPivotY,
+                        fx::fromInt(kCellSize / 2),
+                        gc,
+                        gs
+                    });
+#endif
+
                     const fx lx = sxLocal - primOriginX;
                     const fx ly = syLocal - primOriginY;
 
-                    if (collideCell(p.obstacle, p.mod, lx, ly, sz, r)) {
+                    if (collideCell(p.obstacle, p.mod, lx, ly, shipState.vy)) {
                         return true;
                     }
                 }
@@ -615,9 +856,27 @@ bool Game::checkCollisionAt(fx shipY) const {
 
             const fx rowY0 = worldYForRow(row);
             const fx ly = sy - rowY0;
-            const fx lz = sz;
 
-            if (collideCell(sid, mid, staticLx, ly, lz, r)) {
+#ifdef GV3D_TESTING
+            (void)collisionDebugPrimitives_.push_back(CollisionDebugPrimitive{
+                sid,
+                mid,
+                worldX,
+                rowY0,
+                fx::zero(),
+                worldX + halfCellFx(),
+                rowY0 + halfCellFx(),
+                fx::fromInt(kCellSize / 2),
+                false,
+                fx::zero(),
+                fx::zero(),
+                fx::zero(),
+                fx::one(),
+                fx::zero()
+            });
+#endif
+
+            if (collideCell(sid, mid, staticLx, ly, shipState.vy)) {
                 return true;
             }
         }
@@ -626,55 +885,17 @@ bool Game::checkCollisionAt(fx shipY) const {
     return false;
 }
 
-bool Game::collideCell(ObstacleId sid, ShapeMod mid, fx lx, fx ly, fx lz, fx r) {
-    const fx k = fx::fromInt(kCellSize);
-
-    if (lx < -r || lx > k + r) return false;
-    if (ly < -r || ly > k + r) return false;
-    if (lz < -r || lz > k + r) return false;
-
-    if (sid == ObstacleId::Square) {
-        return true;
+bool Game::collideCell(ObstacleId sid, ShapeMod mid, fx lx, fx ly, fx shipVy) {
+    Poly2fx primitive{};
+    buildPrimitivePoly2D(sid, mid, primitive);
+    if (primitive.count < 3) {
+        return false;
     }
 
-    fx x = lx;
-    fx y = ly;
-    const fx ox = fx::fromInt(kCellSize / 2);
-    const fx oy = fx::fromInt(kCellSize / 2);
-    unapplyMod2(mid, ox, oy, x, y);
+    Poly2fx ship{};
+    buildShipPoly2D(lx, ly, shipVy, ship);
 
-    const fx z = lz;
-
-    if (sid == ObstacleId::RightTri) {
-        if (z < -r || z > k + r) return false;
-        return y <= (x + r);
-    }
-
-    if (sid == ObstacleId::FullSpike || sid == ObstacleId::HalfSpike) {
-        const fx apexScale = (sid == ObstacleId::FullSpike) ? fx::one() : fx::half();
-        const fx apexY = apexScale * k;
-
-        if (apexY.raw() <= 0) return false;
-        if (y < -r || y > apexY + r) return false;
-
-        fx t = (apexY - y) / apexY;
-
-        const fx half = fx::fromInt(kCellSize / 2);
-        fx extent = half * t;
-
-        const fx cx = half;
-        const fx cz = half;
-
-        fx dx = x - cx;
-        fx dz = z - cz;
-
-        if (dx < -(extent + r) || dx > (extent + r)) return false;
-        if (dz < -(extent + r) || dz > (extent + r)) return false;
-
-        return true;
-    }
-
-    return false;
+    return convexPolysOverlap(ship, primitive);
 }
 
 } // namespace gv

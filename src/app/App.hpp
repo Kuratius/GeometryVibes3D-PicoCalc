@@ -12,7 +12,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#define GV3D_TESTING
 
 namespace gv {
 
@@ -72,7 +71,9 @@ private:
         { "Level 5", "levels/L05.BIN" },
         { "Level 6", "levels/L06.BIN" },
         { "Level 7", "levels/L07.BIN" },
-        { "Level 8", "levels/L08.BIN" }
+        //{ "Level 8", "levels/L08.BIN" },
+        //{ "Level 9", "levels/L09.BIN" },
+        //{ "Level 10", "levels/L10.BIN" }
     };
     static constexpr std::size_t kLevelCount = sizeof(kLevels) / sizeof(kLevels[0]);
 

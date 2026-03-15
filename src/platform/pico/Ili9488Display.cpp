@@ -138,10 +138,11 @@ void Ili9488Display::draw(const RenderList& rl) {
     binFrameLines(f);
     binFrameFillRects(f);
     binFrameTexts(f);
-
+    #ifdef GV3D_TESTING
     lastLines  = f.lineCount;
     lastBinned = f.lineBinnedTotal;
     lastTexts  = f.textCount;
+    #endif
 }
 
 void Ili9488Display::drawBitmap565(int x, int y, int w, int h, const uint16_t* pixels) {
@@ -211,6 +212,7 @@ void Ili9488Display::endFrame() {
         }
     }
 
+    #ifdef GV3D_TESTING
     static uint32_t frames = 0;
     static uint64_t t0 = 0;
     if (t0 == 0) t0 = time_us_64();
@@ -223,6 +225,7 @@ void Ili9488Display::endFrame() {
         frames = 0;
         t0 = now;
     }
+    #endif
 }
 
 void Ili9488Display::lcdFillBlack() {

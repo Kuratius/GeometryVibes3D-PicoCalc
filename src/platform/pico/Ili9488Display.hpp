@@ -84,9 +84,11 @@ private:
     static volatile int s_prod;
     static Ili9488Display* s_active;
 
+    #ifdef GV3D_TESTING
     int lastLines = 0;
     int lastBinned = 0;
     int lastTexts = 0;
+    #endif
 
     void lcdFillBlack();
     void initIfNeeded();

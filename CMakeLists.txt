@@ -63,6 +63,11 @@ add_executable(GeometryVibes3D-PicoCalc
 pico_set_program_name(GeometryVibes3D-PicoCalc "GeometryVibes3D-PicoCalc")
 pico_set_program_version(GeometryVibes3D-PicoCalc "0.3")
 
+# Define GV3D_TESTING when building in Debug mode to enable testing features in the code
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(GeometryVibes3D-PicoCalc PRIVATE GV3D_TESTING)
+endif()
+
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(GeometryVibes3D-PicoCalc 0)
 pico_enable_stdio_usb(GeometryVibes3D-PicoCalc 1)

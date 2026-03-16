@@ -30,9 +30,10 @@ A JSON file contains authoring data for a level, including:
   - primitive obstacles
   - animation-group references
 - `animations`: up to 8 animation-group definitions
+- `backgroundColor565`: level background color in RGB565
+- `obstacleColor565`: level obstacle color in RGB565
 - `portal`: metadata stored relative to the last column
 - `endcap`: metadata about the fixed auto-generated endcap
-- optional editor/runtime metadata such as background color
 
 Notes:
 
@@ -55,10 +56,15 @@ An animation group includes:
 - a list of primitive members
 - a list of animation steps
 
-Animation steps currently support:
+Animation steps store:
 
-- **rotate**
-- **hold**
+- `deltaQTurns`: signed quarter-turn delta for the step
+- `targetScaleQ7`: target uniform scale for the step, where:
+  - `128 = 1.0`
+  - `64 = 0.5`
+  - `32 = 0.25`
+  - `255 ≈ 1.992`
+- `durationMs`: step duration in milliseconds
 
 Placed animation-group references in the grid store:
 
@@ -73,7 +79,7 @@ Placed animation-group references in the grid store:
 
 Binary files are designed for streaming so the whole map does not need to be loaded into RAM.
 
-Current runtime files use the **GVL2** format.
+Current runtime files use the **GVL3** format.
 
 ### Layout
 
@@ -89,6 +95,7 @@ The header stores:
 - level width
 - portal offset from the right edge
 - background color
+- obstacle color
 - animation definition count
 - maximum primitive count used by any animation definition
 - offset to packed column data
@@ -126,6 +133,20 @@ Primitive obstacles currently include:
 
 Animation-group references occupy reserved obstacle ID slots in the packed column format.
 
+### Animation definition section
+
+Each animation definition contains:
+
+- an `AnimGroupDefHeader`
+- `primitiveCount` primitive records
+- `stepCount` step records
+
+Each step record stores:
+
+- signed quarter-turn delta
+- target scale in Q7 format
+- duration in milliseconds
+
 ## Editing / Export
 
 Use the Python level editor in `tools/level_editor/` to:
@@ -133,12 +154,14 @@ Use the Python level editor in `tools/level_editor/` to:
 - create or modify `.json`
 - define animation groups
 - place animation-group references
+- choose level background and obstacle colors
+- edit per-step rotation, scale, and duration
 - export `.bin` for runtime use
 
 Typical workflow:
 
 1. Open or create `level_XX.json`
-2. Edit primitive obstacles and animation groups
+2. Edit primitive obstacles, colors, and animation groups
 3. Save the JSON project
 4. Export `LXX.BIN`
 5. Copy the BIN file to the SD card for runtime use
@@ -147,9 +170,10 @@ Typical workflow:
 
 1. Create a new level in the editor with the desired width
 2. Place primitive obstacles and/or animation-group references
-3. Save the JSON project
-4. Export the BIN file
-5. Store the BIN on the SD card in the expected runtime location, for example:
+3. Set background and obstacle colors if desired
+4. Save the JSON project
+5. Export the BIN file
+6. Store the BIN on the SD card in the expected runtime location, for example:
    - `levels/L01.BIN`
    - `levels/L02.BIN`
 

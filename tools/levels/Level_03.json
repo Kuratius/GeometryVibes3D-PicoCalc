@@ -2,6 +2,7 @@
   "width": 331,
   "height": 9,
   "backgroundColor565": 0,
+  "obstacleColor565": 2016,
   "cells": [
     {
       "x": 22,
@@ -14285,6 +14286,7 @@
       "name": "Impeller",
       "pivotHx": 0,
       "pivotHy": 0,
+      "baseScaleQ7": 128,
       "primitives": [
         {
           "hx": 0,
@@ -14317,13 +14319,13 @@
       ],
       "steps": [
         {
-          "kind": "rotate",
           "deltaQTurns": -1,
+          "targetScaleQ7": 128,
           "durationMs": 300
         },
         {
-          "kind": "hold",
           "deltaQTurns": 0,
+          "targetScaleQ7": 128,
           "durationMs": 300
         }
       ]

@@ -44,6 +44,7 @@ struct CollisionDebugPrimitive {
 
     fx groupCos = fx::one();
     fx groupSin = fx::zero();
+    fx groupScale = fx::one();
 };
 #endif
 
@@ -111,8 +112,13 @@ public:
     const StaticVector<AnimStepDef, kMaxAnimSteps>& animSteps() const { return animSteps_; }
 
     uint32_t animTimeMs() const { return animTimeMs_; }
+
     fx animGroupAngleTurns(uint8_t defIndex) const {
         return (defIndex < animGroupDefs_.size()) ? animGroupAngleTurns_[defIndex] : fx::zero();
+    }
+
+    fx animGroupScale(uint8_t defIndex) const {
+        return (defIndex < animGroupDefs_.size()) ? animGroupScale_[defIndex] : fx::one();
     }
 
 private:
@@ -144,6 +150,7 @@ private:
 
     uint32_t animTimeMs_ = 0;
     std::array<fx, kMaxAnimGroupDefs> animGroupAngleTurns_{};
+    std::array<fx, kMaxAnimGroupDefs> animGroupScale_{};
 
 #ifdef GV3D_TESTING
     mutable StaticVector<CollisionDebugPrimitive, kCollisionDebugCap> collisionDebugPrimitives_{};

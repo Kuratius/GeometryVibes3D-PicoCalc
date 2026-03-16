@@ -92,6 +92,7 @@ private:
                               ShapeMod mod,
                               const Vec3fx& primitiveCenter,
                               const Vec3fx& groupPivot,
+                              fx groupScale,
                               fx groupCos,
                               fx groupSin,
                               uint16_t color) const;

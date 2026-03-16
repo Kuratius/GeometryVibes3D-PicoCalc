@@ -54,10 +54,17 @@ static inline void rotateXYAround(Vec3fx& p, const Vec3fx& pivot, fx c, fx s) {
     p.y = pivot.y + dx * s + dy * c;
 }
 
+static inline void scaleXYAround(Vec3fx& p, const Vec3fx& pivot, fx scale) {
+    p.x = pivot.x + (p.x - pivot.x) * scale;
+    p.y = pivot.y + (p.y - pivot.y) * scale;
+}
+
 static inline void transformEdgePoint(Vec3fx& p,
                                       const Vec3fx& translate,
                                       ShapeMod mod,
                                       const Vec3fx* modOrigin,
+                                      const Vec3fx* scalePivot,
+                                      fx scale,
                                       const Vec3fx* rotatePivot,
                                       fx rotateCos,
                                       fx rotateSin) {
@@ -65,6 +72,10 @@ static inline void transformEdgePoint(Vec3fx& p,
 
     if (modOrigin) {
         applyMod3(mod, *modOrigin, p);
+    }
+
+    if (scalePivot) {
+        scaleXYAround(p, *scalePivot, scale);
     }
 
     if (rotatePivot) {
@@ -78,6 +89,8 @@ static inline void drawTransformedEdges(RenderList& rl,
                                         const Vec3fx& translate,
                                         ShapeMod mod,
                                         const Vec3fx* modOrigin,
+                                        const Vec3fx* scalePivot,
+                                        fx scale,
                                         const Vec3fx* rotatePivot,
                                         fx rotateCos,
                                         fx rotateSin,
@@ -86,8 +99,8 @@ static inline void drawTransformedEdges(RenderList& rl,
         Vec3fx a = edges.edges[i].a;
         Vec3fx b = edges.edges[i].b;
 
-        transformEdgePoint(a, translate, mod, modOrigin, rotatePivot, rotateCos, rotateSin);
-        transformEdgePoint(b, translate, mod, modOrigin, rotatePivot, rotateCos, rotateSin);
+        transformEdgePoint(a, translate, mod, modOrigin, scalePivot, scale, rotatePivot, rotateCos, rotateSin);
+        transformEdgePoint(b, translate, mod, modOrigin, scalePivot, scale, rotatePivot, rotateCos, rotateSin);
 
         line3(a, b, color, cam, rl);
     }
@@ -298,6 +311,7 @@ void SceneBuilder::buildCollisionDebug(RenderList& rl, const Camera& cam, const 
                 p.mod,
                 Vec3fx{ p.primitiveCenterX, p.primitiveCenterY, p.primitiveCenterZ },
                 Vec3fx{ p.groupPivotX, p.groupPivotY, p.groupPivotZ },
+                p.groupScale,
                 p.groupCos,
                 p.groupSin,
                 kCollisionDebug
@@ -401,6 +415,8 @@ void SceneBuilder::addCube(RenderList &rl, const Camera& cam, const Vec3fx &pos,
         nullptr,
         nullptr,
         fx::one(),
+        nullptr,
+        fx::one(),
         fx::zero(),
         color
     );
@@ -417,6 +433,8 @@ void SceneBuilder::addSquarePyramid(RenderList& rl, const Camera& cam, const Vec
         pos,
         mod,
         &origin,
+        nullptr,
+        fx::one(),
         nullptr,
         fx::one(),
         fx::zero(),
@@ -437,6 +455,8 @@ void SceneBuilder::addRightTriPrism(RenderList& rl, const Camera& cam, const Vec
         &origin,
         nullptr,
         fx::one(),
+        nullptr,
+        fx::one(),
         fx::zero(),
         color
     );
@@ -448,6 +468,7 @@ void SceneBuilder::addAnimatedPrimitive(RenderList& rl,
                                         ShapeMod mod,
                                         const Vec3fx& primitiveCenter,
                                         const Vec3fx& groupPivot,
+                                        fx groupScale,
                                         fx groupCos,
                                         fx groupSin,
                                         uint16_t color) const {
@@ -475,6 +496,8 @@ void SceneBuilder::addAnimatedPrimitive(RenderList& rl,
         primitiveOrigin,
         mod,
         &primitiveCenter,
+        &groupPivot,
+        groupScale,
         &groupPivot,
         groupCos,
         groupSin,
@@ -550,14 +573,17 @@ void SceneBuilder::buildScene(RenderList& rl,
                               const ExplosionState& explosion,
                               const PortalRayState& portalRays) const {
     const uint16_t kWire   = 0xFFFF;
-    const uint16_t kGreen  = 0x07E0;
     const uint16_t kShip   = 0xFFFF;
     const uint16_t kCyan   = 0x07FF;
     const uint16_t kPurple = 0xF81F;
 
     if (!game.hasLevel()) return;
 
-    const int levelW = (int)game.levelHeader().width;
+    const LevelHeader& hdr = game.levelHeader();
+    const uint16_t obstacleColor = (hdr.obstacleColor565 != 0) ? hdr.obstacleColor565 : uint16_t(0x07E0);
+    const uint16_t bgColor = hdr.backgroundColor565;
+
+    const int levelW = int(hdr.width);
 
     int scrollCol = scrollX.toInt() / kCellSize;
     if (scrollCol < 0) scrollCol = 0;
@@ -622,6 +648,7 @@ void SceneBuilder::buildScene(RenderList& rl,
 
                 const LoadedAnimGroupDef& def = game.animGroupDefs()[defIndex];
                 const fx angleTurns = game.animGroupAngleTurns(defIndex);
+                const fx groupScale = game.animGroupScale(defIndex);
 
                 fx groupCos = fx::one();
                 fx groupSin = fx::zero();
@@ -649,9 +676,10 @@ void SceneBuilder::buildScene(RenderList& rl,
                         p.mod,
                         primitiveCenter,
                         groupPivot,
+                        groupScale,
                         groupCos,
                         groupSin,
-                        kGreen
+                        obstacleColor
                     );
                 }
 
@@ -662,19 +690,19 @@ void SceneBuilder::buildScene(RenderList& rl,
 
             switch (sid) {
                 case ObstacleId::Square:
-                    addCube(rl, cam, {worldX, worldY, cz}, kGreen);
+                    addCube(rl, cam, {worldX, worldY, cz}, obstacleColor);
                     break;
 
                 case ObstacleId::RightTri:
-                    addRightTriPrism(rl, cam, {worldX, worldY, cz}, kGreen, mid, {ox, oy, cz});
+                    addRightTriPrism(rl, cam, {worldX, worldY, cz}, obstacleColor, mid, {ox, oy, cz});
                     break;
 
                 case ObstacleId::HalfSpike:
-                    addSquarePyramid(rl, cam, {worldX, worldY, cz}, kGreen, mid, fx::half(), {ox, oy, cz});
+                    addSquarePyramid(rl, cam, {worldX, worldY, cz}, obstacleColor, mid, fx::half(), {ox, oy, cz});
                     break;
 
                 case ObstacleId::FullSpike:
-                    addSquarePyramid(rl, cam, {worldX, worldY, cz}, kGreen, mid, fx::one(), {ox, oy, cz});
+                    addSquarePyramid(rl, cam, {worldX, worldY, cz}, obstacleColor, mid, fx::one(), {ox, oy, cz});
                     break;
 
                 default:
@@ -683,8 +711,7 @@ void SceneBuilder::buildScene(RenderList& rl,
         }
     }
 
-    const LevelHeader& h = game.levelHeader();
-    const int portalCol = portal_abs_x(h);
+    const int portalCol = portal_abs_x(hdr);
     const int py = 4;
 
     if (portalCol >= col0 && portalCol < col1) {

@@ -8,7 +8,7 @@ Features:
 - Horizontal scrolling playfield with vertically centered grid
 - Rectangle selection with Shift+drag
 - Copy / cut / paste selected cells
-- Undo (`Ctrl+Z`)
+- Undo / redo (`Ctrl+Z`, `Ctrl+Y`)
 - Document-style workflow:
   - New
   - Open
@@ -17,6 +17,9 @@ Features:
 - Title bar shows current file name, or `Untitled` if unsaved
 - Dirty-state indicator (`*`) in the title bar when there are unsaved changes
 - Fixed 6-column endcap and portal preview overlay; endcap region is locked
+- Per-level color selection for:
+  - background color
+  - obstacle color
 - Supports up to 8 named animation groups
 - Create a new animation group from a selected set of primitive obstacles
 - Animation group slots can be selected and deleted
@@ -30,6 +33,10 @@ Features:
 - In-editor preview of placed animation groups as they appear in-game
 - Live playback preview of animation steps
 - Edit animation group name, pivot, and step list
+- Per-step animation editing includes:
+  - rotation delta in quarter-turns
+  - target scale
+  - duration in milliseconds
 - Export JSON project files
 - Export packed `.bin` level files compatible with the GV3D runtime format
 
@@ -38,6 +45,8 @@ Notes:
 - Binary export writes the packed level format used by the game.
 - The portal and endcap are generated automatically during export and shown in the editor as overlays.
 - Animation-group origins are derived from the weighted average of the selected primitive footprint, snapped to the half-cell grid.
+- Animation step scale is stored in the binary format as `targetScaleQ7`, where `128 = 1.0`.
+- Level colors are stored in RGB565.
 
 Run:
 ```bash

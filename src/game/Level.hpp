@@ -45,27 +45,24 @@ enum class ShapeMod : uint8_t {
     Invert   = 3  // invert in X and Y (rotate 180 degrees)
 };
 
-enum class AnimStepType : uint8_t {
-    Rotate = 0,
-    Hold   = 1,
-};
-
 #pragma pack(push, 1)
 
 // 16-byte file header
 struct LevelHeader {
-    char     magic[3];                // "GVL"
-    uint8_t  version;                 // 2 = with anim defs section support
+    char     magic[3];                 // "GVL"
+    uint8_t  version;                  // 3 = anim scale + obstacle color
 
-    uint16_t width;                   // length of level in columns
-    int8_t   portalDx;                // portal offset in columns from the right edge of the level
-    uint16_t backgroundColor565;      // future use: background color for the level
+    uint16_t width;                    // length of level in columns
+    int8_t   portalDx;                 // portal offset in columns from the right edge of the level
+    uint8_t  reserved0;                // reserved, should be zero
 
-    uint8_t  animDefCount;            // number of animated defs in anim defs section
-    uint8_t  animDefMaxPrimitiveCount;// max primitive count of any single anim def
+    uint16_t backgroundColor565;       // level background color
+    uint16_t obstacleColor565;         // level obstacle/wireframe color
 
-    uint16_t levelDataOffset;         // offset to packed column data from start of file
-    uint8_t  reserved[3];             // reserved for future use, should be zero
+    uint8_t  animDefCount;             // number of animated defs in anim defs section
+    uint8_t  animDefMaxPrimitiveCount; // max primitive count of any single anim def
+
+    uint16_t levelDataOffset;          // offset to packed column data from start of file
 };
 #pragma pack(pop)
 
@@ -141,9 +138,9 @@ struct AnimPrimitiveDef {
 static_assert(sizeof(AnimPrimitiveDef) == 4, "AnimPrimitiveDef must be 4 bytes");
 
 struct AnimStepDef {
-    uint8_t  type;               // AnimStepType
-    int8_t   deltaQuarterTurns;  // signed: +1=+90, -3=-270; ignored for Hold
-    uint16_t durationMs;         // segment duration in milliseconds
+    int8_t   deltaQuarterTurns; // signed: +1=+90, -3=-270, 0=no rotation change
+    uint8_t  targetScaleQ7;     // 128 = 1.0, 64 = 0.5, 255 ~= 1.992
+    uint16_t durationMs;        // segment duration in milliseconds
 };
 
 static_assert(sizeof(AnimStepDef) == 4, "AnimStepDef must be 4 bytes");
@@ -153,10 +150,11 @@ struct AnimGroupDefHeader {
     int8_t   pivotHx;            // pivot in half-cell units relative to anchor center
     int8_t   pivotHy;            // pivot in half-cell units relative to anchor center
     uint8_t  stepCount;          // number of AnimStepDef records that follow primitives
+    uint8_t  baseScaleQ7;        // unsigned fixed-point scale applied to entire group
     uint16_t totalDurationMs;    // optional cached loop duration; 0 means compute at load/read
 };
 
-static_assert(sizeof(AnimGroupDefHeader) == 6, "AnimGroupDefHeader must be 6 bytes");
+static_assert(sizeof(AnimGroupDefHeader) == 7, "AnimGroupDefHeader must be 7 bytes");
 
 #pragma pack(pop)
 
@@ -179,11 +177,12 @@ inline uint8_t anim_group_index(ObstacleId id) {
 
 inline bool is_primitive_obstacle(ObstacleId id) {
     return uint8_t(id) >= uint8_t(ObstacleId::Empty) &&
-        uint8_t(id) <= uint8_t(ObstacleId::Star);
+           uint8_t(id) <= uint8_t(ObstacleId::Star);
 }
 
 inline bool is_anim_primitive_obstacle(ObstacleId id) {
-    return uint8_t(id) >= uint8_t(ObstacleId::Square) && uint8_t(id) <= uint8_t(ObstacleId::Star);
+    return uint8_t(id) >= uint8_t(ObstacleId::Square) &&
+           uint8_t(id) <= uint8_t(ObstacleId::Star);
 }
 
 inline uint16_t anim_group_def_size_bytes(const AnimGroupDefHeader& h) {
@@ -220,7 +219,7 @@ inline bool read_header(FILE* f, LevelHeader& out) {
     if (std::fread(&out, 1, sizeof(LevelHeader), f) != sizeof(LevelHeader)) return false;
 
     if (std::memcmp(out.magic, "GVL", 3) != 0) return false;
-    if (out.version != 2) return false;
+    if (out.version != 3) return false;
 
     if (out.width == 0) return false;
     if (out.animDefCount > 8) return false;

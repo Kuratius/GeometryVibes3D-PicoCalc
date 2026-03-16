@@ -16,6 +16,10 @@ static inline int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ?
 
 static inline gv::fx halfCellFx() { return gv::fx::fromInt(gv::kCellSize / 2); }
 
+static inline gv::fx q7ScaleToFx(uint8_t q7) {
+    return gv::fx::fromRatio(int(q7), 128);
+}
+
 static inline void applyGroupOffsetToAnchor(gv::AnimGroupOffsetMod gm, gv::fx& anchorX, gv::fx& anchorY) {
     const gv::fx half = halfCellFx();
 
@@ -54,6 +58,14 @@ static inline void inverseRotatePointAround(gv::fx& x, gv::fx& y,
 
     x = ox + ndx;
     y = oy + ndy;
+}
+
+static inline void inverseScalePointAround(gv::fx& x, gv::fx& y,
+                                           gv::fx ox, gv::fx oy,
+                                           gv::fx scale) {
+    if (scale.raw() == 0) return;
+    x = ox + (x - ox) / scale;
+    y = oy + (y - oy) / scale;
 }
 
 // Conservative per-def search radius in half-cell units.
@@ -359,8 +371,12 @@ void Game::clearAnimDefs() {
     animPrimitives_.clear();
     animSteps_.clear();
     animTimeMs_ = 0;
+
     for (auto& a : animGroupAngleTurns_) {
         a = fx::zero();
+    }
+    for (auto& s : animGroupScale_) {
+        s = fx::one();
     }
 }
 
@@ -371,37 +387,40 @@ void Game::updateAnimCache() {
 
         if (totalMs == 0 || def.hdr.stepCount == 0) {
             animGroupAngleTurns_[defIndex] = fx::zero();
+            animGroupScale_[defIndex] = fx::fromRatio(int(def.hdr.baseScaleQ7), 128);
             continue;
         }
 
         const uint32_t localMs = animTimeMs_ % uint32_t(totalMs);
 
         fx angle = fx::zero();
+        fx scale = fx::fromRatio(int(def.hdr.baseScaleQ7), 128);
         uint32_t walked = 0;
 
         for (uint8_t i = 0; i < def.hdr.stepCount; ++i) {
             const AnimStepDef& step = animSteps_[def.firstStep + i];
             const uint32_t dur = step.durationMs;
+            const fx targetScale = q7ScaleToFx(step.targetScaleQ7);
 
             if (localMs < (walked + dur)) {
-                if (step.type == uint8_t(AnimStepType::Rotate)) {
-                    const uint32_t stepMs = localMs - walked;
-                    const fx u = fx::fromRatio(int(stepMs), int(dur));
-                    const fx delta =
-                        fx::fromInt(int(step.deltaQuarterTurns)) * fx::fromRatio(1, 4);
-                    angle = angle + delta * u;
-                }
+                const uint32_t stepMs = localMs - walked;
+                const fx u = fx::fromRatio(int(stepMs), int(dur));
+
+                const fx deltaAngle =
+                    fx::fromInt(int(step.deltaQuarterTurns)) * fx::fromRatio(1, 4);
+
+                angle = angle + deltaAngle * u;
+                scale = lerp(scale, targetScale, u);
                 break;
             }
 
-            if (step.type == uint8_t(AnimStepType::Rotate)) {
-                angle = angle + fx::fromInt(int(step.deltaQuarterTurns)) * fx::fromRatio(1, 4);
-            }
-
+            angle = angle + fx::fromInt(int(step.deltaQuarterTurns)) * fx::fromRatio(1, 4);
+            scale = targetScale;
             walked += dur;
         }
 
         animGroupAngleTurns_[defIndex] = -angle;
+        animGroupScale_[defIndex] = scale;
     }
 }
 
@@ -461,6 +480,7 @@ bool Game::loadAnimDefs() {
         if (hdr.primitiveCount > levelHdr.animDefMaxPrimitiveCount) return false;
         if (hdr.primitiveCount > primTmp.size()) return false;
         if (hdr.stepCount > stepTmp.size()) return false;
+        if (hdr.baseScaleQ7 == 0) return false;
 
         const size_t primOffset = defOffset + sizeof(AnimGroupDefHeader);
         const size_t primBytes = size_t(hdr.primitiveCount) * sizeof(AnimPrimitiveDef);
@@ -493,17 +513,11 @@ bool Game::loadAnimDefs() {
 
         for (uint8_t i = 0; i < hdr.stepCount; ++i) {
             const AnimStepDef& s = stepTmp[i];
-            if (s.type != uint8_t(AnimStepType::Rotate) &&
-                s.type != uint8_t(AnimStepType::Hold)) {
-                return false;
-            }
 
             if (s.durationMs == 0) {
                 return false;
             }
-
-            if (s.type == uint8_t(AnimStepType::Rotate) &&
-                s.deltaQuarterTurns == 0) {
+            if (s.targetScaleQ7 == 0) {
                 return false;
             }
 
@@ -566,7 +580,7 @@ bool Game::loadLevel(const char* path) {
     }
 
     if (std::memcmp(levelHdr.magic, "GVL", 3) != 0) { unloadLevel(); return false; }
-    if (levelHdr.version != 2) { unloadLevel(); return false; }
+    if (levelHdr.version != 3) { unloadLevel(); return false; }
     if (levelHdr.width == 0) { unloadLevel(); return false; }
     if (levelHdr.animDefCount > kMaxAnimGroupDefs) { unloadLevel(); return false; }
     if (levelHdr.levelDataOffset < sizeof(LevelHeader)) { unloadLevel(); return false; }
@@ -793,6 +807,8 @@ bool Game::checkCollisionAt(fx shipY) const {
                 applyGroupOffsetToAnchor(gm, anchorX, anchorY);
 
                 const fx angleTurns = animGroupAngleTurns_[defIndex];
+                const fx groupScale = animGroupScale_[defIndex];
+
                 fx gc = fx::one();
                 fx gs = fx::zero();
                 turnsToSinCos(angleTurns, gc, gs);
@@ -800,10 +816,11 @@ bool Game::checkCollisionAt(fx shipY) const {
                 const fx groupPivotX = anchorX + mulInt(halfCellFx(), int(def.hdr.pivotHx));
                 const fx groupPivotY = anchorY - mulInt(halfCellFx(), int(def.hdr.pivotHy));
 
-                // Move ship center into the group's unrotated space.
+                // Move ship center into the group's unrotated and unscaled space.
                 fx sxLocal = sx;
                 fx syLocal = sy;
                 inverseRotatePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, gc, gs);
+                inverseScalePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, groupScale);
 
                 for (uint8_t i = 0; i < def.hdr.primitiveCount; ++i) {
                     const AnimPrimitiveDef& p = animPrimitives_[def.firstPrimitive + i];
@@ -829,7 +846,8 @@ bool Game::checkCollisionAt(fx shipY) const {
                         groupPivotY,
                         fx::fromInt(kCellSize / 2),
                         gc,
-                        gs
+                        gs,
+                        groupScale
                     });
 #endif
 
@@ -872,7 +890,8 @@ bool Game::checkCollisionAt(fx shipY) const {
                 fx::zero(),
                 fx::zero(),
                 fx::one(),
-                fx::zero()
+                fx::zero(),
+                fx::one()
             });
 #endif
 

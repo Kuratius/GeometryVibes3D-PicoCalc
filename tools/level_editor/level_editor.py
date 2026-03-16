@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import math
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, colorchooser
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple, Any, List, Union
 
@@ -17,8 +17,9 @@ CELL = 28
 GRID_LINE = "#2b2b2b"
 
 LEVEL_MAGIC = b"GVL"
-LEVEL_VERSION = 2
+LEVEL_VERSION = 3
 DEFAULT_BACKGROUND_COLOR_565 = 0x0000
+DEFAULT_OBSTACLE_COLOR_565 = 0x07E0
 
 MAX_ANIM_GROUPS = 8
 
@@ -218,33 +219,34 @@ class AnimPrimitive:
 
 @dataclass(frozen=True)
 class AnimStep:
-    kind: str
     delta_qturns: int = 0
+    target_scale_q7: int = 128
     duration_ms: int = 250
 
     def to_obj(self) -> Dict[str, Any]:
         return {
-            "kind": self.kind,
             "deltaQTurns": int(self.delta_qturns),
+            "targetScaleQ7": int(self.target_scale_q7),
             "durationMs": int(self.duration_ms),
         }
 
     @staticmethod
     def from_obj(obj: Dict[str, Any]) -> "AnimStep":
-        kind = str(obj.get("kind", "hold"))
-        if kind not in ("rotate", "hold"):
-            kind = "hold"
         dq = int(obj.get("deltaQTurns", 0))
+        scale = max(1, min(255, int(obj.get("targetScaleQ7", 128))))
         dur = max(1, int(obj.get("durationMs", 250)))
-        if kind == "hold":
-            dq = 0
-        return AnimStep(kind=kind, delta_qturns=dq, duration_ms=dur)
+        return AnimStep(
+            delta_qturns=dq,
+            target_scale_q7=scale,
+            duration_ms=dur,
+        )
 
 @dataclass
 class AnimDef:
     name: str
     pivot_hx: int = 0
     pivot_hy: int = 0
+    base_scale_q7: int = 128
     primitives: List[AnimPrimitive] = field(default_factory=list)
     steps: List[AnimStep] = field(default_factory=list)
 
@@ -253,6 +255,7 @@ class AnimDef:
             "name": self.name,
             "pivotHx": int(self.pivot_hx),
             "pivotHy": int(self.pivot_hy),
+            "baseScaleQ7": int(self.base_scale_q7),
             "primitives": [p.to_obj() for p in self.primitives],
             "steps": [s.to_obj() for s in self.steps],
         }
@@ -262,9 +265,17 @@ class AnimDef:
         name = str(obj.get("name", "Unnamed"))
         pivx = int(obj.get("pivotHx", 0))
         pivy = int(obj.get("pivotHy", 0))
+        base_scale = max(1, min(255, int(obj.get("baseScaleQ7", 128))))
         prims = [AnimPrimitive.from_obj(p) for p in obj.get("primitives", [])]
         steps = [AnimStep.from_obj(s) for s in obj.get("steps", [])]
-        return AnimDef(name=name, pivot_hx=pivx, pivot_hy=pivy, primitives=prims, steps=steps)
+        return AnimDef(
+            name=name,
+            pivot_hx=pivx,
+            pivot_hy=pivy,
+            base_scale_q7=base_scale,
+            primitives=prims,
+            steps=steps
+        )
 
 @dataclass
 class Level:
@@ -272,6 +283,7 @@ class Level:
     height: int = GRID_H
     cells: Dict[str, CellValue] = None
     background_color_565: int = DEFAULT_BACKGROUND_COLOR_565
+    obstacle_color_565: int = DEFAULT_OBSTACLE_COLOR_565
     anim_defs: List[Optional[AnimDef]] = None
 
     def __post_init__(self) -> None:
@@ -406,6 +418,7 @@ class Level:
         width = int(self.width)
         portal_dx_signed = int(PORTAL_REL["dx"])
         background_color_565 = int(self.background_color_565) & 0xFFFF
+        obstacle_color_565 = int(self.obstacle_color_565) & 0xFFFF
 
         anim_def_count = self.used_anim_def_count()
         anim_def_max_primitive_count = self.anim_def_max_primitive_count()
@@ -428,11 +441,14 @@ class Level:
             if total_duration > 0xFFFF:
                 total_duration = 0xFFFF
 
+            base_scale_q7 = 128 if a is None else max(1, min(255, int(a.base_scale_q7)))
+
             anim_defs_blob += bytes([
                 len(prims) & 0xFF,
                 pivot_hx & 0xFF,
                 pivot_hy & 0xFF,
                 len(steps) & 0xFF,
+                base_scale_q7 & 0xFF,
             ])
             anim_defs_blob += int(total_duration).to_bytes(2, "little", signed=False)
 
@@ -444,11 +460,11 @@ class Level:
                 anim_defs_blob += bytes([shape_id, mod_id])
 
             for s in steps:
-                step_type = 0 if s.kind == "rotate" else 1
                 dq = int(s.delta_qturns)
+                scale_q7 = max(1, min(255, int(s.target_scale_q7)))
                 dur = max(1, int(s.duration_ms))
-                anim_defs_blob += bytes([step_type & 0xFF])
                 anim_defs_blob += int(dq).to_bytes(1, "little", signed=True)
+                anim_defs_blob += bytes([scale_q7 & 0xFF])
                 anim_defs_blob += int(dur).to_bytes(2, "little", signed=False)
 
         level_data_offset = 16 + len(anim_defs_blob)
@@ -458,11 +474,12 @@ class Level:
         header += bytes([LEVEL_VERSION])
         header += width.to_bytes(2, "little", signed=False)
         header += int.to_bytes(portal_dx_signed, 1, "little", signed=True)
+        header += b"\x00"  # reserved0
         header += background_color_565.to_bytes(2, "little", signed=False)
+        header += obstacle_color_565.to_bytes(2, "little", signed=False)
         header += bytes([anim_def_count & 0xFF])
         header += bytes([anim_def_max_primitive_count & 0xFF])
         header += level_data_offset.to_bytes(2, "little", signed=False)
-        header += b"\x00\x00\x00"
 
         if len(header) != 16:
             raise ValueError(f"Header length is {len(header)}, expected 16 bytes.")
@@ -511,6 +528,7 @@ class Level:
             "width": self.width,
             "height": self.height,
             "backgroundColor565": self.background_color_565,
+            "obstacleColor565": self.obstacle_color_565,
             "cells": authored,
             "obstacles": out_obs,
             "animations": [
@@ -529,6 +547,7 @@ class Level:
             raise ValueError("Expected height=9.")
 
         bg = int(obj.get("backgroundColor565", DEFAULT_BACKGROUND_COLOR_565)) & 0xFFFF
+        fg = int(obj.get("obstacleColor565", DEFAULT_OBSTACLE_COLOR_565)) & 0xFFFF
 
         anim_defs_raw = obj.get("animations", [None] * MAX_ANIM_GROUPS)
         anim_defs: List[Optional[AnimDef]] = [None] * MAX_ANIM_GROUPS
@@ -536,7 +555,13 @@ class Level:
             if anim_defs_raw[i] is not None:
                 anim_defs[i] = AnimDef.from_obj(anim_defs_raw[i])
 
-        lvl = Level(width=w, height=h, background_color_565=bg, anim_defs=anim_defs)
+        lvl = Level(
+            width=w,
+            height=h,
+            background_color_565=bg,
+            obstacle_color_565=fg,
+            anim_defs=anim_defs
+        )
         lvl.cells.clear()
 
         cells_src = obj.get("cells")
@@ -665,6 +690,7 @@ class EditorApp:
         self.mod_var = tk.StringVar(value=MOD_NONE)
         self.selected_anim_slot: Optional[int] = None
         self.anim_offset_var = tk.StringVar(value=AG_OFF_NONE)
+        self.base_scale_var = tk.StringVar(value="1.00")
 
         self._painting = False
         self._erasing = False
@@ -700,6 +726,7 @@ class EditorApp:
         self.redraw_all()
         self._update_modifier_enable()
         self._refresh_animation_ui()
+        self.refresh_color_ui()
         self._schedule_preview_tick()
         self._update_window_title()
 
@@ -772,6 +799,27 @@ class EditorApp:
         tk.Spinbox(wrow, from_=1, to=9999, width=6, textvariable=self.width_var,
                    command=self.on_width_change).pack(side="left", padx=(6, 0))
         tk.Button(wrow, text="Apply", command=self.on_width_change).pack(side="left", padx=6)
+
+        tk.Label(left, text="").pack(pady=6)
+        tk.Label(left, text="Colors", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+
+        bg_row = tk.Frame(left)
+        bg_row.pack(fill="x", pady=(4, 2))
+        tk.Label(bg_row, text="Background:").pack(side="left")
+        self.bg_color_swatch = tk.Label(bg_row, width=3, relief="sunken")
+        self.bg_color_swatch.pack(side="left", padx=(6, 4))
+        self.bg_color_label = tk.Label(bg_row, text="0x0000", width=8, anchor="w")
+        self.bg_color_label.pack(side="left")
+        tk.Button(bg_row, text="Choose…", command=self.choose_background_color).pack(side="right")
+
+        obs_row = tk.Frame(left)
+        obs_row.pack(fill="x", pady=(2, 8))
+        tk.Label(obs_row, text="Obstacles:").pack(side="left")
+        self.obs_color_swatch = tk.Label(obs_row, width=3, relief="sunken")
+        self.obs_color_swatch.pack(side="left", padx=(6, 4))
+        self.obs_color_label = tk.Label(obs_row, text="0x07E0", width=8, anchor="w")
+        self.obs_color_label.pack(side="left")
+        tk.Button(obs_row, text="Choose…", command=self.choose_obstacle_color).pack(side="right")
 
         tk.Label(left, text="Mode", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(6, 0))
         tk.Radiobutton(left, text="Paint primitives", variable=self.paint_mode_var,
@@ -847,6 +895,13 @@ class EditorApp:
         self.pivot_hy_var = tk.IntVar(value=0)
         tk.Spinbox(pivot_row, from_=-32, to=32, width=5, textvariable=self.pivot_hy_var,
                 command=self.apply_anim_pivot).pack(side="left", padx=(4, 0))
+        
+        base_row = tk.Frame(left)
+        base_row.pack(fill="x", pady=(2, 4))
+        tk.Label(base_row, text="Base scale:").pack(side="left")
+        self.base_scale_entry = tk.Entry(base_row, width=6, textvariable=self.base_scale_var)
+        self.base_scale_entry.pack(side="left", padx=(6, 0))
+        tk.Button(base_row, text="Update", command=self.apply_anim_base_scale).pack(side="left", padx=(6, 0))
 
         self.step_listbox = tk.Listbox(left, height=8, exportselection=False)
         self.step_listbox.pack(fill="x", pady=(4, 4))
@@ -854,28 +909,26 @@ class EditorApp:
         step_edit = tk.Frame(left)
         step_edit.pack(fill="x", pady=(2, 4))
 
-        tk.Label(step_edit, text="Kind:").grid(row=0, column=0, sticky="w")
-        self.step_kind_var = tk.StringVar(value="hold")
-        self.step_kind_menu = tk.OptionMenu(step_edit, self.step_kind_var, "rotate", "hold")
-        self.step_kind_menu.grid(row=0, column=1, sticky="ew", padx=(4, 8))
-
-        tk.Label(step_edit, text="Δ qturns:").grid(row=0, column=2, sticky="w")
+        tk.Label(step_edit, text="Δ qturns:").grid(row=0, column=0, sticky="w")
         self.step_delta_var = tk.IntVar(value=0)
         self.step_delta_spin = tk.Spinbox(step_edit, from_=-8, to=8, width=5, textvariable=self.step_delta_var)
-        self.step_delta_spin.grid(row=0, column=3, sticky="w", padx=(4, 8))
+        self.step_delta_spin.grid(row=0, column=1, sticky="w", padx=(4, 8))
+
+        tk.Label(step_edit, text="Target Scale:").grid(row=0, column=2, sticky="w")
+        self.step_scale_var = tk.StringVar(value="1.00")
+        self.step_scale_entry = tk.Entry(step_edit, width=6, textvariable=self.step_scale_var)
+        self.step_scale_entry.grid(row=0, column=3, sticky="w", padx=(4, 8))
 
         tk.Label(step_edit, text="Duration ms:").grid(row=1, column=0, sticky="w")
         self.step_duration_var = tk.IntVar(value=250)
         self.step_duration_spin = tk.Spinbox(step_edit, from_=1, to=10000, width=8, textvariable=self.step_duration_var)
         self.step_duration_spin.grid(row=1, column=1, sticky="w", padx=(4, 8))
 
-        tk.Button(step_edit, text="Apply Step", command=self.apply_selected_anim_step).grid(row=1, column=2, columnspan=2, sticky="ew")
+        tk.Button(step_edit, text="Update Step", command=self.apply_selected_anim_step).grid(row=1, column=2, columnspan=2, sticky="ew")
 
         step_btns = tk.Frame(left)
         step_btns.pack(fill="x", pady=(2, 4))
-        tk.Button(step_btns, text="+ Rotate +90", command=lambda: self.add_anim_step("rotate", 1, 250)).pack(fill="x", pady=1)
-        tk.Button(step_btns, text="+ Rotate -90", command=lambda: self.add_anim_step("rotate", -1, 250)).pack(fill="x", pady=1)
-        tk.Button(step_btns, text="+ Hold", command=lambda: self.add_anim_step("hold", 0, 250)).pack(fill="x", pady=1)
+        tk.Button(step_btns, text="Add Step", command=self.add_blank_anim_step).pack(fill="x", pady=1)
         tk.Button(step_btns, text="Delete Step", command=self.delete_selected_anim_step).pack(fill="x", pady=1)
 
         step_btns2 = tk.Frame(left)
@@ -968,20 +1021,40 @@ class EditorApp:
         if not sel:
             return None
         return int(sel[0])
+    
+    def q7_to_scale_text(self, q7: int) -> str:
+        return f"{q7 / 128.0:.2f}"
+
+    def scale_text_to_q7(self, s: str) -> int:
+        try:
+            v = float(s.strip())
+        except Exception:
+            v = 1.0
+        if v < (1.0 / 128.0):
+            v = 1.0 / 128.0
+        if v > (255.0 / 128.0):
+            v = 255.0 / 128.0
+        q7 = int(round(v * 128.0))
+        return max(1, min(255, q7))
 
     def refresh_selected_step_editor(self) -> None:
         anim = self.current_anim_def()
         idx = self.current_anim_step_index()
 
+        if anim is None:
+            self.base_scale_var.set("1.00")
+        else:
+            self.base_scale_var.set(self.q7_to_scale_text(anim.base_scale_q7))
+
         if anim is None or idx is None or idx < 0 or idx >= len(anim.steps):
-            self.step_kind_var.set("hold")
             self.step_delta_var.set(0)
+            self.step_scale_var.set("1.00")
             self.step_duration_var.set(250)
             return
 
         step = anim.steps[idx]
-        self.step_kind_var.set(step.kind)
         self.step_delta_var.set(step.delta_qturns)
+        self.step_scale_var.set(self.q7_to_scale_text(step.target_scale_q7))
         self.step_duration_var.set(step.duration_ms)
 
     def apply_selected_anim_step(self) -> None:
@@ -990,18 +1063,17 @@ class EditorApp:
         if anim is None or idx is None or idx < 0 or idx >= len(anim.steps):
             return
 
-        kind = self.step_kind_var.get().strip()
-        if kind not in ("rotate", "hold"):
-            kind = "hold"
-
         dq = int(self.step_delta_var.get())
+        scale_q7 = self.scale_text_to_q7(self.step_scale_var.get())
         dur = max(1, int(self.step_duration_var.get()))
-        if kind == "hold":
-            dq = 0
 
         self.begin_txn()
         self.touch_all_anim_defs_before()
-        anim.steps[idx] = AnimStep(kind=kind, delta_qturns=dq, duration_ms=dur)
+        anim.steps[idx] = AnimStep(
+            delta_qturns=dq,
+            target_scale_q7=scale_q7,
+            duration_ms=dur
+        )
         self.touch_all_anim_defs_after()
         self.commit_txn()
 
@@ -1040,7 +1112,14 @@ class EditorApp:
         self.begin_txn()
         self.touch_all_anim_defs_before()
         step = anim.steps[idx]
-        anim.steps.insert(idx + 1, AnimStep(kind=step.kind, delta_qturns=step.delta_qturns, duration_ms=step.duration_ms))
+        anim.steps.insert(
+            idx + 1,
+            AnimStep(
+                delta_qturns=step.delta_qturns,
+                target_scale_q7=step.target_scale_q7,
+                duration_ms=step.duration_ms
+            )
+        )
         self.touch_all_anim_defs_after()
         self.commit_txn()
 
@@ -1067,10 +1146,11 @@ class EditorApp:
         self.pivot_hy_var.set(anim.pivot_hy)
 
         for i, step in enumerate(anim.steps):
-            if step.kind == "rotate":
-                label = f"{i+1}. Rotate {step.delta_qturns:+d} qturns over {step.duration_ms} ms"
-            else:
-                label = f"{i+1}. Hold {step.duration_ms} ms"
+            label = (
+                f"{i+1}. Δrot {step.delta_qturns:+d} qturns, "
+                f"scale {step.target_scale_q7/128.0:.2f}, "
+                f"{step.duration_ms} ms"
+            )
             self.step_listbox.insert("end", label)
 
         if anim is not None and anim.steps and not self.step_listbox.curselection():
@@ -1105,14 +1185,53 @@ class EditorApp:
         self.commit_txn()
         self.redraw_all()
 
-    def add_anim_step(self, kind: str, delta_qturns: int, duration_ms: int) -> None:
+    def apply_anim_base_scale(self) -> None:
+        anim = self.current_anim_def()
+        if anim is None:
+            return
+
+        q7 = self.scale_text_to_q7(self.base_scale_var.get())
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        anim.base_scale_q7 = q7
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+
+        self.refresh_anim_editor_panel()
+        self.redraw_all()
+
+    def add_blank_anim_step(self) -> None:
         anim = self.current_anim_def()
         if anim is None:
             return
 
         self.begin_txn()
         self.touch_all_anim_defs_before()
-        anim.steps.append(AnimStep(kind=kind, delta_qturns=delta_qturns, duration_ms=duration_ms))
+        anim.steps.append(AnimStep(delta_qturns=0, target_scale_q7=128, duration_ms=250))
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+
+        self.refresh_anim_editor_panel()
+        self.step_listbox.selection_clear(0, "end")
+        self.step_listbox.selection_set(len(anim.steps) - 1)
+        self.refresh_selected_step_editor()
+        self.redraw_all()
+
+    def add_anim_step(self, delta_qturns: int, target_scale_q7: int, duration_ms: int) -> None:
+        anim = self.current_anim_def()
+        if anim is None:
+            return
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        anim.steps.append(
+            AnimStep(
+                delta_qturns=delta_qturns,
+                target_scale_q7=max(1, min(255, int(target_scale_q7))),
+                duration_ms=duration_ms
+            )
+        )
         self.touch_all_anim_defs_after()
         self.commit_txn()
         self.refresh_anim_editor_panel()
@@ -1161,30 +1280,42 @@ class EditorApp:
             self.redraw_all()
         self._schedule_preview_tick()
 
-    def eval_anim_angle_turns(self, anim: AnimDef) -> float:
-        if anim is None or not anim.steps:
-            return 0.0
+    def eval_anim_state(self, anim: AnimDef) -> Tuple[float, float]:
+        if anim is None:
+            return 0.0, 1.0
+
+        base_scale = anim.base_scale_q7 / 128.0
+
+        if not anim.steps:
+            return 0.0, base_scale
 
         total = sum(max(1, s.duration_ms) for s in anim.steps)
         if total <= 0:
-            return 0.0
+            return 0.0, base_scale
 
         t = self.preview_time_ms % total
         angle = 0.0
+        scale = base_scale
         walked = 0
 
         for step in anim.steps:
             dur = max(1, step.duration_ms)
+            target_scale = step.target_scale_q7 / 128.0
+
             if t < walked + dur:
-                if step.kind == "rotate":
-                    u = (t - walked) / dur
-                    angle += 0.25 * step.delta_qturns * u
+                u = (t - walked) / dur
+                angle += 0.25 * step.delta_qturns * u
+                scale = scale + (target_scale - scale) * u
                 break
 
-            if step.kind == "rotate":
-                angle += 0.25 * step.delta_qturns
+            angle += 0.25 * step.delta_qturns
+            scale = target_scale
             walked += dur
 
+        return angle, scale
+
+    def eval_anim_angle_turns(self, anim: AnimDef) -> float:
+        angle, _ = self.eval_anim_state(anim)
         return angle
 
     def clear_selection(self) -> None:
@@ -1612,6 +1743,7 @@ class EditorApp:
             name=name,
             pivot_hx=0,
             pivot_hy=0,
+            base_scale_q7=128,
             primitives=primitives,
             steps=[]
         )
@@ -1653,14 +1785,14 @@ class EditorApp:
 
         if not anim_def.steps:
             anim_def.steps = [
-                AnimStep(kind="rotate", delta_qturns=1, duration_ms=250),
-                AnimStep(kind="hold", duration_ms=250),
-                AnimStep(kind="rotate", delta_qturns=1, duration_ms=250),
-                AnimStep(kind="hold", duration_ms=250),
-                AnimStep(kind="rotate", delta_qturns=1, duration_ms=250),
-                AnimStep(kind="hold", duration_ms=250),
-                AnimStep(kind="rotate", delta_qturns=-3, duration_ms=250),
-                AnimStep(kind="hold", duration_ms=500),
+                AnimStep(delta_qturns=1, target_scale_q7=128, duration_ms=250),
+                AnimStep(delta_qturns=0, target_scale_q7=128, duration_ms=250),
+                AnimStep(delta_qturns=1, target_scale_q7=128, duration_ms=250),
+                AnimStep(delta_qturns=0, target_scale_q7=128, duration_ms=250),
+                AnimStep(delta_qturns=1, target_scale_q7=128, duration_ms=250),
+                AnimStep(delta_qturns=0, target_scale_q7=128, duration_ms=250),
+                AnimStep(delta_qturns=-3, target_scale_q7=128, duration_ms=250),
+                AnimStep(delta_qturns=0, target_scale_q7=128, duration_ms=500),
             ]
 
         self.level.set_cell(owning_x, owning_y, AnimGroupRef(group_index=free, offset_mod=offset_mod))
@@ -1682,6 +1814,7 @@ class EditorApp:
     def redraw_all(self) -> None:
         self.canvas.delete("all")
         self._rebuild_canvas_region()
+        self.canvas.configure(bg=self.rgb565_to_hex(self.level.background_color_565))        
 
         for y in range(self.level.height):
             for x in range(self.level.width):
@@ -1735,6 +1868,7 @@ class EditorApp:
                                         pivot_col: float,
                                         pivot_row: float,
                                         turns: float,
+                                        scale: float,
                                         shape: str,
                                         mod: str,
                                         tag: str,
@@ -1748,7 +1882,12 @@ class EditorApp:
         for u, v in poly:
             col = (center_col - 0.5) + u
             row = (center_row - 0.5) + v
+
+            col = pivot_col + (col - pivot_col) * scale
+            row = pivot_row + (row - pivot_row) * scale
+
             col, row = self._rotate_point_about(col, row, pivot_col, pivot_row, turns)
+
             x = col * CELL
             y = row * CELL + self._y_offset_px
             pts.extend([x, y])
@@ -1789,7 +1928,8 @@ class EditorApp:
                 x0, y0, x1, y1,
                 cell.shape, cell.mod,
                 tag,
-                PRIM_FILL, PRIM_OUTLINE
+                "",
+                self.rgb565_to_hex(self.level.obstacle_color_565)
             )
         elif isinstance(cell, AnimGroupRef):
             self._draw_anim_group_preview(x, y, cell, tag)
@@ -1817,7 +1957,7 @@ class EditorApp:
         pivot_col = anchor_col + 0.5 * anim.pivot_hx
         pivot_row = anchor_row + 0.5 * anim.pivot_hy
 
-        turns = self.eval_anim_angle_turns(anim)
+        turns, scale = self.eval_anim_state(anim)
 
         for p in anim.primitives:
             prim_center_col = anchor_col + 0.5 * p.hx
@@ -1829,10 +1969,11 @@ class EditorApp:
                 pivot_col,
                 pivot_row,
                 turns,
+                scale,
                 p.shape,
                 p.mod,
                 tag,
-                ANIM_FILL,
+                "",
                 ANIM_OUTLINE
             )
 
@@ -2011,6 +2152,73 @@ class EditorApp:
         self.commit_txn()
         self.redraw_all()
         self._refresh_animation_ui()
+
+    # -------- Color utils --------
+
+    def rgb565_to_hex(self, c565: int) -> str:
+        c565 &= 0xFFFF
+        r5 = (c565 >> 11) & 0x1F
+        g6 = (c565 >> 5) & 0x3F
+        b5 = c565 & 0x1F
+        r8 = (r5 * 255) // 31
+        g8 = (g6 * 255) // 63
+        b8 = (b5 * 255) // 31
+        return f"#{r8:02x}{g8:02x}{b8:02x}"
+
+    def hex_to_rgb565(self, hex_color: str) -> int:
+        s = hex_color.lstrip("#")
+        if len(s) != 6:
+            return 0
+        r8 = int(s[0:2], 16)
+        g8 = int(s[2:4], 16)
+        b8 = int(s[4:6], 16)
+        r5 = (r8 * 31) // 255
+        g6 = (g8 * 63) // 255
+        b5 = (b8 * 31) // 255
+        return ((r5 & 0x1F) << 11) | ((g6 & 0x3F) << 5) | (b5 & 0x1F)
+
+    def refresh_color_ui(self) -> None:
+        if hasattr(self, "bg_color_swatch"):
+            self.bg_color_swatch.configure(bg=self.rgb565_to_hex(self.level.background_color_565))
+        if hasattr(self, "bg_color_label"):
+            self.bg_color_label.configure(text=f"0x{self.level.background_color_565:04X}")
+
+        if hasattr(self, "obs_color_swatch"):
+            self.obs_color_swatch.configure(bg=self.rgb565_to_hex(self.level.obstacle_color_565))
+        if hasattr(self, "obs_color_label"):
+            self.obs_color_label.configure(text=f"0x{self.level.obstacle_color_565:04X}")
+
+    def choose_background_color(self) -> None:
+        initial = self.rgb565_to_hex(self.level.background_color_565)
+        result = colorchooser.askcolor(color=initial, title="Choose Background Color")
+        if not result or not result[1]:
+            return
+        new_c = self.hex_to_rgb565(result[1])
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        self.level.background_color_565 = new_c
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+
+        self.refresh_color_ui()
+        self.redraw_all()
+
+    def choose_obstacle_color(self) -> None:
+        initial = self.rgb565_to_hex(self.level.obstacle_color_565)
+        result = colorchooser.askcolor(color=initial, title="Choose Obstacle Color")
+        if not result or not result[1]:
+            return
+        new_c = self.hex_to_rgb565(result[1])
+
+        self.begin_txn()
+        self.touch_all_anim_defs_before()
+        self.level.obstacle_color_565 = new_c
+        self.touch_all_anim_defs_after()
+        self.commit_txn()
+
+        self.refresh_color_ui()
+        self.redraw_all()
 
     # -------- Painting / selection --------
 
@@ -2206,6 +2414,7 @@ class EditorApp:
             self._rebuild_canvas_region()
             self.redraw_all()
             self._refresh_animation_ui()
+            self.refresh_color_ui()
             self.current_file_path = path
             self._history_revision = 0
             self._saved_revision = 0
@@ -2223,6 +2432,7 @@ class EditorApp:
         self._rebuild_canvas_region()
         self.redraw_all()
         self._refresh_animation_ui()
+        self.refresh_color_ui()
         self.current_file_path = None
         self._history_revision = 0
         self._saved_revision = 0

@@ -2,7 +2,7 @@
 
 A faithful RP2040 port of **Geometry Vibes 3D**, targeting the **ClockworkPi PicoCalc**.
 
-Current state: playable wireframe “fake 3D” implementation with a state-driven app flow, level progression, animated obstacle groups, in-game collision against animated geometry, and stable fixed-rate rendering on the ILI9488.
+Current state: playable wireframe “fake 3D” implementation with a state-driven app flow, level progression, animated obstacle groups with rotation and scaling, gameplay-plane collision against static and animated geometry, and stable fixed-rate rendering on the ILI9488.
 
 ## Features
 
@@ -11,7 +11,7 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
   - title screen
   - level select
   - gameplay
-- **Streaming level playback** using the **GVL2 / 56-bit column format**
+- **Streaming level playback** using the **GVL3 / 56-bit column format**
 - **Level-select menu**
   - highlighted selection
   - locked/unlocked level progression
@@ -25,6 +25,9 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
   - static level geometry
   - rotation / inversion modifiers
   - animated obstacle groups
+- **Gameplay-plane collision model**
+  - 2D primitive overlap for static and animated obstacles
+  - more accurate ship collision than the earlier sphere-style approximation
 - **Wireframe effects**, including:
   - animated portal rays
   - ship trail
@@ -32,9 +35,12 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
 - **Animated obstacle groups**
   - grouped primitive definitions stored in the level file
   - per-group pivot
-  - rotate / hold keyframe steps
+  - per-step rotation and target scale
   - half-cell anchor offsets
   - synced runtime animation playback
+- **Per-level colors**
+  - background color
+  - obstacle / wireframe color
 
 ## Hardware / platform highlights
 
@@ -56,10 +62,11 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
 - ROM-resident **8×8 bitmap font**
 - Cached screen-space text objects for HUD and menu rendering
 - Scene building and animated-group rendering are driven from level-streamed data
+- Animated group rendering supports rotation and uniform scaling around a shared pivot
 
 ## Level format
 
-The current runtime uses the **GVL2** format:
+The current runtime uses the **GVL3** format:
 
 - 16-byte header
 - optional animated-group definition section
@@ -68,8 +75,15 @@ The current runtime uses the **GVL2** format:
   - primitive obstacles
   - animation-group references
   - half-cell animation-group anchor offsets
+  - per-level background and obstacle colors
 
 Animated groups are authored as reusable definitions and then referenced from packed level cells.
+
+Animation steps support:
+
+- signed quarter-turn rotation deltas
+- target scale in Q7 format (`128 = 1.0`)
+- duration in milliseconds
 
 ## Tools
 
@@ -78,12 +92,13 @@ Animated groups are authored as reusable definitions and then referenced from pa
   - paint primitive obstacles and modifiers
   - create named animated obstacle groups from selected primitives
   - edit group pivot and animation steps
+  - edit per-level background and obstacle colors
   - preview placed animated groups in-editor
   - live animation playback preview
   - locked auto-generated endcap + portal preview
-  - rectangle select, copy, cut, paste, and undo
+  - rectangle select, copy, cut, paste, undo, and redo
   - Open / Save / Save As JSON workflow
-  - export packed **GVL2** binary files for the game
+  - export packed **GVL3** binary files for the game
 
 - **RGB565 image converter**: `tools/image_convert/convert_rgb565.py`
   - converts source images into raw RGB565 assets for use in-game

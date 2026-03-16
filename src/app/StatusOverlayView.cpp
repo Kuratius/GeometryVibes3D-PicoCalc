@@ -2,6 +2,7 @@
 #include "StatusOverlay.hpp"
 #include "render/RenderList.hpp"
 #include "render/Text.hpp"
+#include <cstring>
 
 namespace gv {
 
@@ -12,8 +13,6 @@ void appendTo(RenderList& rl,
               int screenW,
               int screenH)
 {
-    (void)screenW;
-
     if (!overlay.visible()) return;
 
     static constexpr uint16_t kFooter = 0x8410; // gray
@@ -21,30 +20,38 @@ void appendTo(RenderList& rl,
     static constexpr int kPanelX = 8;
     static constexpr int kBottomMargin = 8;
     static constexpr int kFooterGap = 8;
+    static constexpr int kRightMargin = 8;
+    static constexpr int kGlyphW = 8;
 
     static Text footerText{ "F1 to hide" };
 
     const auto& lines = overlay.lines();
-    if (lines.empty()) return;
 
-    const int panelH = int(lines.size()) * kLineStep + 8 + kLineStep;
-    int y = screenH - panelH - kLineStep - kBottomMargin;
+    int y = 0;
 
-    for (const auto& line : lines) {
-        rl.addText(
-            &line.text,
-            (int16_t)kPanelX,
-            (int16_t)y,
-            line.color565,
-            255,
-            false,
-            0,
-            TextStyle::Background
-        );
-        y += kLineStep;
+    if (!lines.empty()) {
+        const int panelH = int(lines.size()) * kLineStep + 8 + kLineStep;
+        y = screenH - panelH - kLineStep - kBottomMargin;
+
+        for (const auto& line : lines) {
+            rl.addText(
+                &line.text,
+                (int16_t)kPanelX,
+                (int16_t)y,
+                line.color565,
+                255,
+                false,
+                0,
+                TextStyle::Background
+            );
+            y += kLineStep;
+        }
+
+        y += kFooterGap;
+    } else {
+        y = screenH - kLineStep - kBottomMargin;
     }
 
-    y += kFooterGap;
     rl.addText(
         &footerText,
         (int16_t)kPanelX,
@@ -55,6 +62,24 @@ void appendTo(RenderList& rl,
         0,
         TextStyle::Background
     );
+
+    if (overlay.hasFooterRight()) {
+        const char* s = overlay.footerRightText().c_str();
+        const int textW = int(std::strlen(s)) * kGlyphW;
+        int x = screenW - kRightMargin - textW;
+        if (x < kPanelX) x = kPanelX;
+
+        rl.addText(
+            &overlay.footerRightText(),
+            (int16_t)x,
+            (int16_t)y,
+            overlay.footerRightColor(),
+            255,
+            false,
+            0,
+            TextStyle::Background
+        );
+    }
 }
 
 } // namespace StatusOverlayView

@@ -292,15 +292,17 @@ static inline void buildPrimitivePoly2D(gv::ObstacleId sid, gv::ShapeMod mod, Po
 
 static inline void buildShipPoly2D(gv::fx shipCenterX, gv::fx shipCenterY, gv::fx shipVy, Poly2fx& poly) {
     using gv::fx;
-    const fx halfW = fx::fromInt(gv::kCellSize / 4);
-    const fx len   = fx::fromInt(gv::kCellSize) * fx::fromRatio(9, 20);
+    
+    const fx pad = fx::fromRatio(3, 2); // Small padding to give a little breathing room for collision; adjust to improve feel. 
+    const fx halfW = fx::fromInt(gv::kCellSize / 4) - pad;
+    const fx halfLen   = fx::fromInt(gv::kCellSize) * fx::fromRatio(9, 20) - pad;
 
     poly.count = 3;
 
     // Canonical ship triangle in XY, matching SceneBuilder::addShip().
-    poly.v[0] = { shipCenterX + len, shipCenterY };
-    poly.v[1] = { shipCenterX - len, shipCenterY + halfW };
-    poly.v[2] = { shipCenterX - len, shipCenterY - halfW };
+    poly.v[0] = { shipCenterX + halfLen, shipCenterY };
+    poly.v[1] = { shipCenterX - halfLen, shipCenterY + halfW };
+    poly.v[2] = { shipCenterX - halfLen, shipCenterY - halfW };
 
     gv::fx c = fx::one();
     gv::fx s = fx::zero();

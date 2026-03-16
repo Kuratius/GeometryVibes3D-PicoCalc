@@ -629,14 +629,12 @@ void Ili9488Display::drawLineIntoSlab(uint16_t* slab, int slabY0, int slabY1, co
 }
 
 void Ili9488Display::drawLineXMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln) {
-    using gv::fx;
-
     int x0 = ln.x0;
     int y0 = ln.y0;
     int x1 = ln.x1;
     int y1 = ln.y1;
 
-    // Normalize the walk so x always increases.
+    // Normalize so x always increases.
     if (x0 > x1) {
         const int tx = x0; x0 = x1; x1 = tx;
         const int ty = y0; y0 = y1; y1 = ty;
@@ -660,50 +658,102 @@ void Ili9488Display::drawLineXMajorIntoSlab(uint16_t* slab, int slabY0, int slab
     const int maxY = max_i32(y0, y1);
     if (maxY < slabY0 || minY > slabY1) return;
 
-    const fx x0f = fx::fromInt(x0);
-    const fx y0f = fx::fromInt(y0);
-    const fx slope = fx::fromRatio(dy, dx);
-
     int xStart = x0;
     int xEnd   = x1;
 
     if (dy == 0) {
         if (y0 < slabY0 || y0 > slabY1) return;
     } else {
-        // Restrict the x walk to positions that can round into this slab's rows.
-        const fx invSlope = fx::fromRatio(dx, dy);
-        const fx bandLo = fx::fromInt(slabY0) - fx::half();
-        const fx bandHi = fx::fromInt(slabY1) + fx::half();
+        // Keep the slab narrowing idea, but do it with integer math.
+        // These match the old half-pixel band intent:
+        //   y in [slabY0 - 0.5, slabY1 + 0.5]
+        // Multiply through by 2*dy to avoid fixed point.
 
-        const fx xa = x0f + (bandLo - y0f) * invSlope;
-        const fx xb = x0f + (bandHi - y0f) * invSlope;
+        const int ady = iabs_i32(dy);
 
-        const fx xLo = (xa < xb) ? xa : xb;
-        const fx xHi = (xa > xb) ? xa : xb;
+        // Conservative integer bounds. We intentionally pad by 1 pixel
+        // on both sides, just like the old code did.
+        auto floor_div = [](int64_t n, int64_t d) -> int {
+            int64_t q = n / d;
+            int64_t r = n % d;
+            if (r != 0 && ((r < 0) != (d < 0))) --q;
+            return (int)q;
+        };
 
-        xStart = max_i32(x0, floorFxToInt(xLo) - 1);
-        xEnd   = min_i32(x1, ceilFxToInt(xHi) + 1);
+        auto ceil_div = [](int64_t n, int64_t d) -> int {
+            int64_t q = n / d;
+            int64_t r = n % d;
+            if (r != 0 && ((r > 0) == (d > 0))) ++q;
+            return (int)q;
+        };
+
+        // Solve for x where the ideal line enters/leaves the slab's
+        // half-pixel vertical band.
+        //
+        // y = y0 + dy*(x-x0)/dx
+        // 2*(y - y0)*dx = 2*dy*(x - x0)
+        //
+        // Band:
+        //   2*slabY0 - 1 <= 2*y <= 2*slabY1 + 1
+        //
+        // Rearranged to x bounds.
+        const int64_t twoDx = int64_t(dx) * 2;
+        const int64_t nLo = int64_t(2 * slabY0 - 1 - 2 * y0) * dx;
+        const int64_t nHi = int64_t(2 * slabY1 + 1 - 2 * y0) * dx;
+        const int64_t d   = int64_t(2 * dy);
+
+        int xLo, xHi;
+        if (dy > 0) {
+            xLo = x0 + floor_div(nLo, d);
+            xHi = x0 + ceil_div (nHi, d);
+        } else {
+            xLo = x0 + floor_div(nHi, d);
+            xHi = x0 + ceil_div (nLo, d);
+        }
+
+        xStart = max_i32(x0, xLo - 1);
+        xEnd   = min_i32(x1, xHi + 1);
         if (xStart > xEnd) return;
+
+        (void)ady;
+    }
+
+    const int sy = (dy >= 0) ? 1 : -1;
+    const int ady = iabs_i32(dy);
+
+    // Advance the global x-major rasterizer from x0 to xStart so this slab
+    // continues the exact same line walk the full line would have used.
+    int y = y0;
+    int err = dx >> 1;
+
+    for (int x = x0; x < xStart; ++x) {
+        err -= ady;
+        if (err < 0) {
+            y += sy;
+            err += dx;
+        }
     }
 
     for (int x = xStart; x <= xEnd; ++x) {
-        const fx y = y0f + gv::mulInt(slope, x - x0);
-        const int yi = y.roundToInt();
-        if ((unsigned)(yi - slabY0) < (unsigned)SLAB_ROWS) {
-            plotSlab(slab, x, yi - slabY0, ln.c565);
+        if ((unsigned)(y - slabY0) < (unsigned)SLAB_ROWS) {
+            plotSlab(slab, x, y - slabY0, ln.c565);
+        }
+
+        err -= ady;
+        if (err < 0) {
+            y += sy;
+            err += dx;
         }
     }
 }
 
 void Ili9488Display::drawLineYMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln) {
-    using gv::fx;
-
     int x0 = ln.x0;
     int y0 = ln.y0;
     int x1 = ln.x1;
     int y1 = ln.y1;
 
-    // Normalize the walk so y always increases.
+    // Normalize so y always increases.
     if (y0 > y1) {
         const int tx = x0; x0 = x1; x1 = tx;
         const int ty = y0; y0 = y1; y1 = ty;
@@ -726,13 +776,37 @@ void Ili9488Display::drawLineYMajorIntoSlab(uint16_t* slab, int slabY0, int slab
     const int yEnd   = min_i32(y1, slabY1);
     if (yStart > yEnd) return;
 
-    const fx x0f = fx::fromInt(x0);
-    const fx slope = fx::fromRatio(dx, dy);
+    // Optional narrowing in X for the slab. This keeps the spirit of the old
+    // code, though for y-major lines the vertical slab clip already does most
+    // of the useful narrowing.
+    const int minX = min_i32(x0, x1);
+    const int maxX = max_i32(x0, x1);
+    if (maxX < 0 || minX >= W) return;
+
+    const int sx = (dx >= 0) ? 1 : -1;
+    const int adx = iabs_i32(dx);
+
+    // Advance the global y-major rasterizer from y0 up to yStart so this slab
+    // matches the full-line rasterization exactly.
+    int x = x0;
+    int err = dy >> 1;
+
+    for (int y = y0; y < yStart; ++y) {
+        err -= adx;
+        if (err < 0) {
+            x += sx;
+            err += dy;
+        }
+    }
 
     for (int y = yStart; y <= yEnd; ++y) {
-        const fx x = x0f + gv::mulInt(slope, y - y0);
-        const int xi = x.roundToInt();
-        plotSlab(slab, xi, y - slabY0, ln.c565);
+        plotSlab(slab, x, y - slabY0, ln.c565);
+
+        err -= adx;
+        if (err < 0) {
+            x += sx;
+            err += dy;
+        }
     }
 }
 
@@ -751,16 +825,21 @@ void Ili9488Display::drawFillRectIntoSlab(uint16_t* slab, int slabY0, int slabY1
     const int yStart = (dstY0 < slabY0) ? slabY0 : dstY0;
     const int yEnd   = (dstY1 > slabY1) ? slabY1 : dstY1;
 
+    const int count = xEnd - xStart + 1;
+    if (count <= 0) return;
+
     for (int y = yStart; y <= yEnd; ++y) {
-        const int yLocal = y - slabY0;
-        uint16_t* row = slab + yLocal * W;
-        for (int x = xStart; x <= xEnd; ++x) {
-            row[x] = inst.color565;
+        uint16_t* dst = slab + (y - slabY0) * W + xStart;
+        for (int i = 0; i < count; ++i) {
+            dst[i] = inst.color565;
         }
     }
 }
 
 static inline uint16_t blend565(uint16_t dst, uint16_t src, uint8_t a) {
+    if (a == 255) return src;
+    if (a == 0)   return dst;
+
     const uint32_t ia = 255u - a;
 
     const uint32_t dr = (dst >> 11) & 0x1F;
@@ -785,7 +864,9 @@ void Ili9488Display::drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, co
     const int textW = text->width();
     const int textH = text->height();
     if (textW <= 0 || textH <= 0) return;
-    if (inst.alpha == 0) return;
+
+    const uint8_t alpha = inst.alpha;
+    if (alpha == 0) return;
 
     const bool inverted = (inst.styleFlags & TextStyle::Inverted) != 0;
     const bool hasBg    = (inst.styleFlags & TextStyle::Background) != 0;
@@ -804,22 +885,64 @@ void Ili9488Display::drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, co
     const int yStart = (dstY0 < slabY0) ? slabY0 : dstY0;
     const int yEnd   = (dstY1 > slabY1) ? slabY1 : dstY1;
 
+    const uint16_t fg = inst.color565;
+    const uint16_t bg = inst.bgColor565;
+
     for (int y = yStart; y <= yEnd; ++y) {
         const int ty = y - dstY0;
         const int yLocal = y - slabY0;
         uint16_t* row = slab + yLocal * W;
 
-        for (int x = xStart; x <= xEnd; ++x) {
-            const int tx = x - dstX0;
-            const bool on = text->testPixel(tx, ty);
+        const uint8_t* bits = text->rowBits(ty);
+        if (!bits) continue;
 
+        const int tx0 = xStart - dstX0;
+        const int tx1 = xEnd   - dstX0;
+
+        if (alpha == 255) {
             if (inverted) {
-                const uint16_t target = on ? 0x0000 : inst.color565;
-                row[x] = blend565(row[x], target, inst.alpha);
-            } else if (on) {
-                row[x] = blend565(row[x], inst.color565, inst.alpha);
+                for (int tx = tx0, x = xStart; tx <= tx1; ++tx, ++x) {
+                    const uint8_t mask = uint8_t(0x80u >> (tx & 7));
+                    const bool on = (bits[tx >> 3] & mask) != 0;
+                    row[x] = on ? 0x0000 : fg;
+                }
             } else if (hasBg) {
-                row[x] = blend565(row[x], inst.bgColor565, inst.alpha);
+                for (int tx = tx0, x = xStart; tx <= tx1; ++tx, ++x) {
+                    const uint8_t mask = uint8_t(0x80u >> (tx & 7));
+                    const bool on = (bits[tx >> 3] & mask) != 0;
+                    row[x] = on ? fg : bg;
+                }
+            } else {
+                for (int tx = tx0, x = xStart; tx <= tx1; ++tx, ++x) {
+                    const uint8_t mask = uint8_t(0x80u >> (tx & 7));
+                    if (bits[tx >> 3] & mask) {
+                        row[x] = fg;
+                    }
+                }
+            }
+        } else {
+            if (inverted) {
+                for (int tx = tx0, x = xStart; tx <= tx1; ++tx, ++x) {
+                    const uint8_t mask = uint8_t(0x80u >> (tx & 7));
+                    const bool on = (bits[tx >> 3] & mask) != 0;
+                    const uint16_t target = on ? 0x0000 : fg;
+                    row[x] = blend565(row[x], target, alpha);
+                }
+            } else if (hasBg) {
+                for (int tx = tx0, x = xStart; tx <= tx1; ++tx, ++x) {
+                    const uint8_t mask = uint8_t(0x80u >> (tx & 7));
+                    const bool on = (bits[tx >> 3] & mask) != 0;
+                    row[x] = on
+                        ? blend565(row[x], fg, alpha)
+                        : blend565(row[x], bg, alpha);
+                }
+            } else {
+                for (int tx = tx0, x = xStart; tx <= tx1; ++tx, ++x) {
+                    const uint8_t mask = uint8_t(0x80u >> (tx & 7));
+                    if (bits[tx >> 3] & mask) {
+                        row[x] = blend565(row[x], fg, alpha);
+                    }
+                }
             }
         }
     }

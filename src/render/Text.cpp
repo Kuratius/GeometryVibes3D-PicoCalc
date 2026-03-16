@@ -60,6 +60,12 @@ bool Text::testPixel(int x, int y) const {
     return (bits_[byteIndex] & (1u << bitInByte)) != 0;
 }
 
+const uint8_t* Text::rowBits(int y) const {
+    if (y < 0 || y >= height_) return nullptr;
+    const int stride = (MAX_W + 7) >> 3;
+    return bits_.data() + y * stride;
+}
+
 void Text::setBit(std::array<uint8_t, BIT_CAP>& bits, int x, int y, bool on) {
     const int bitIndex = y * MAX_W + x;
     const int byteIndex = bitIndex >> 3;

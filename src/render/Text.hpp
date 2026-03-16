@@ -41,6 +41,8 @@ public:
     std::size_t bitByteCount() const { return bitBytesUsed_; }
 
     bool testPixel(int x, int y) const;
+    const uint8_t* rowBits(int y) const;
+    int rowStrideBytes() const { return (MAX_W + 7) >> 3; }
 
 private:
     void rebuild();

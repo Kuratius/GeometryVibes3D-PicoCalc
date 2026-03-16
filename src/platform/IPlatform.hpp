@@ -12,6 +12,8 @@ public:
     virtual void init() = 0;
     virtual uint64_t nowUs() const = 0;
     virtual uint32_t dtUs() = 0;
+    virtual uint8_t batteryLevelPercent() const = 0;
+    virtual bool batteryCharging() const = 0;
     virtual IDisplay& display() = 0;
     virtual IFileSystem& fs() = 0;
     virtual IInput& input() = 0;

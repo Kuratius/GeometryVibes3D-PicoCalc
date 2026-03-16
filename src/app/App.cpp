@@ -1,11 +1,58 @@
 #include "App.hpp"
 #include "platform/Keys.hpp"
+#include <cstdio>
 
 namespace gv {
 
 namespace {
 
 static constexpr uint32_t kFrameUs = 33333; // ~30 FPS
+static constexpr uint32_t kBatteryPollUs = 2000000; // 2 seconds
+
+struct BatteryFooterCache {
+    uint32_t accumUs = kBatteryPollUs; // force immediate first update
+    uint8_t level = 0;
+    bool charging = false;
+    bool valid = false;
+};
+
+void updateBatteryFooter(StatusOverlay& overlay,
+                         const IPlatform& platform,
+                         BatteryFooterCache& cache,
+                         uint32_t dtUs) {
+    cache.accumUs += dtUs;
+    if (cache.valid && cache.accumUs < kBatteryPollUs) {
+        return;
+    }
+    cache.accumUs = 0;
+
+    const uint8_t level = platform.batteryLevelPercent();
+    const bool charging = platform.batteryCharging();
+
+    if (cache.valid && cache.level == level && cache.charging == charging) {
+        return;
+    }
+
+    cache.level = level;
+    cache.charging = charging;
+    cache.valid = true;
+
+    uint16_t color = 0x07E0; // green
+    if (level < 10) {
+        color = 0xF800; // red
+    } else if (level < 30) {
+        color = 0xFFE0; // yellow
+    }
+
+    char buf[32];
+    if (charging) {
+        std::snprintf(buf, sizeof(buf), "Batt Charging: %u%%", unsigned(level));
+    } else {
+        std::snprintf(buf, sizeof(buf), "Batt: %u%%", unsigned(level));
+    }
+
+    overlay.setFooterRight(buf, color);
+}
 
 } // namespace
 
@@ -117,6 +164,7 @@ int App::run(IPlatform& platform) {
     init(*plat_);
 
     uint32_t accumUs = 0;
+    BatteryFooterCache batteryCache{};
 
     while (true) {
         uint32_t dtUs = plat_->dtUs();
@@ -135,6 +183,7 @@ int App::run(IPlatform& platform) {
         if (currentState_) {
             currentState_->update(*this, in, kFrameUs);
             if (currentState_) {
+                updateBatteryFooter(statusOverlay_, *plat_, batteryCache, kFrameUs);
                 currentState_->render(*this, plat_->display(), frame_);
             }
         }

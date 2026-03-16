@@ -50,6 +50,7 @@ add_executable(GeometryVibes3D-PicoCalc
     src/render/Font8x8.cpp
     src/render/Project.cpp
     src/platform/pico/PicoInput.cpp
+    src/platform/pico/PicoSouthbridge.cpp
     src/platform/pico/PicoPlatform.cpp
     src/platform/pico/PicoFileSystem.cpp
     src/platform/pico/Ili9488Display.cpp

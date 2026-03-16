@@ -4,7 +4,9 @@ namespace gv {
 
 void StatusOverlay::clear() {
     lines_.clear();
-    visible_ = false;
+    footerRightText_.clear();
+    footerRightColor565_ = 0xFFFF;
+    hasFooterRight_ = false;
 }
 
 bool StatusOverlay::addMessage(const char* s, uint16_t color565) {
@@ -24,7 +26,6 @@ bool StatusOverlay::addMessage(const char* s, uint16_t color565) {
         return true;
     }
 
-    // Drop oldest and shift up.
     for (std::size_t i = 1; i < lines_.size(); ++i) {
         lines_[i - 1] = lines_[i];
     }
@@ -39,15 +40,33 @@ bool StatusOverlay::addMessage(const char* s, uint16_t color565) {
 }
 
 bool StatusOverlay::addInfo(const char* s) {
-    return addMessage(s, 0xFFFF); // white
+    return addMessage(s, 0xFFFF);
 }
 
 bool StatusOverlay::addWarning(const char* s) {
-    return addMessage(s, 0xFFE0); // yellow
+    return addMessage(s, 0xFFE0);
 }
 
 bool StatusOverlay::addError(const char* s) {
-    return addMessage(s, 0xF800); // red
+    return addMessage(s, 0xF800);
+}
+
+void StatusOverlay::setFooterRight(const char* s, uint16_t color565) {
+    footerRightText_.clear();
+    footerRightColor565_ = color565;
+
+    if (s && *s) {
+        footerRightText_.setText(s);
+        hasFooterRight_ = true;
+    } else {
+        hasFooterRight_ = false;
+    }
+}
+
+void StatusOverlay::clearFooterRight() {
+    footerRightText_.clear();
+    footerRightColor565_ = 0xFFFF;
+    hasFooterRight_ = false;
 }
 
 } // namespace gv

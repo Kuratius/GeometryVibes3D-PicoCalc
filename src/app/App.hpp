@@ -12,7 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#define GV3D_TESTING
+//#define GV3D_TESTING  // Un-comment to unlock all levels
 
 namespace gv {
 

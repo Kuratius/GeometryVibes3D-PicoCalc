@@ -16,7 +16,7 @@ public:
     void render(App& app, IDisplay& display, RenderList& rl) override;
 
 private:
-    static constexpr std::size_t kLevelTextCap = 8;
+    static constexpr std::size_t kLevelTextCap = 10;
 
     void rebuildTexts(App& app);
     void buildMenu(App& app, RenderList& rl) const;

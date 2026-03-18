@@ -25,16 +25,32 @@ void LevelSelectState::rebuildTexts(App& app) {
     const SaveData::SaveEntry* save = app.activeSave();
 
     for (std::size_t i = 0; i < levelCount_; ++i) {
-        char buf[48]{};
+        char buf[64]{};
 
         if (app.isLevelUnlocked(i)) {
             unsigned percent = 0;
+            unsigned stars = 0;
+
             if (save && i < SaveData::kLevelCount) {
                 percent = save->percentComplete[i];
                 if (percent > 100) percent = 100;
+
+                stars = save->stars[i];
+                if (stars > 3) stars = 3;
             }
 
             std::snprintf(buf, sizeof(buf), "%s %3u%%", app.levelName(i), percent);
+
+            std::size_t len = 0;
+            while (buf[len] != '\0' && len + 1 < sizeof(buf)) {
+                ++len;
+            }
+
+            for (unsigned s = 0; s < stars && len + 1 < sizeof(buf) - 1; ++s) {
+                buf[len++] = ' ';
+                buf[len++] = char(127);
+            }
+            buf[len] = '\0';
         } else {
             std::snprintf(buf, sizeof(buf), "%s [Locked]", app.levelName(i));
         }

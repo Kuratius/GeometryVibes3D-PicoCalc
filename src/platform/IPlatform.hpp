@@ -14,6 +14,10 @@ public:
     virtual uint32_t dtUs() = 0;
     virtual uint8_t batteryLevelPercent() const = 0;
     virtual bool batteryCharging() const = 0;
+
+    virtual bool serialOutputEnabled() const = 0;
+    virtual void setSerialOutputEnabled(bool enabled) = 0;
+
     virtual IDisplay& display() = 0;
     virtual IFileSystem& fs() = 0;
     virtual IInput& input() = 0;

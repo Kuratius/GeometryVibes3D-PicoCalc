@@ -3,6 +3,7 @@
 #include "platform/IPlatform.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
+#include <cstdio>
 
 namespace gv {
 
@@ -21,12 +22,35 @@ void LevelSelectState::rebuildTexts(App& app) {
         levelCount_ = kLevelTextCap;
     }
 
+    const SaveData::SaveEntry* save = app.activeSave();
+
     for (std::size_t i = 0; i < levelCount_; ++i) {
-        levelTexts_[i].setText(app.levelName(i));
+        char buf[48]{};
+
+        if (app.isLevelUnlocked(i)) {
+            unsigned percent = 0;
+            if (save && i < SaveData::kLevelCount) {
+                percent = save->percentComplete[i];
+                if (percent > 100) percent = 100;
+            }
+
+            std::snprintf(buf, sizeof(buf), "%s %3u%%", app.levelName(i), percent);
+        } else {
+            std::snprintf(buf, sizeof(buf), "%s [Locked]", app.levelName(i));
+        }
+
+        levelTexts_[i].setText(buf);
     }
 
     if (selectedLevel_ >= levelCount_) {
         selectedLevel_ = (levelCount_ > 0) ? (levelCount_ - 1) : 0;
+    }
+
+    if (!app.isLevelUnlocked(selectedLevel_)) {
+        selectedLevel_ = 0;
+        while ((selectedLevel_ + 1) < levelCount_ && !app.isLevelUnlocked(selectedLevel_)) {
+            ++selectedLevel_;
+        }
     }
 }
 
@@ -57,6 +81,8 @@ void LevelSelectState::buildMenu(App& app, RenderList& rl) const {
             selected
         );
     }
+    
+    rl.addText(&help_, 16, 180, kGray);
 }
 
 void LevelSelectState::update(App& app, const InputState& in, uint32_t dtUs) {
@@ -72,6 +98,11 @@ void LevelSelectState::update(App& app, const InputState& in, uint32_t dtUs) {
     } else if (in.downPressed && (selectedLevel_ + 1) < app.unlockedLevelCount()) {
         ++selectedLevel_;
         app.setSelectedLevel(selectedLevel_);
+    }
+
+    if (in.back) {
+        app.showHomeMenu();
+        return;
     }
 
     if (in.confirm || in.thrustPressed) {

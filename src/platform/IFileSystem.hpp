@@ -9,6 +9,7 @@ public:
     virtual ~IFile() = default;
 
     virtual bool read(void* dst, size_t bytes, size_t& outRead) = 0;
+    virtual bool write(const void* src, size_t bytes, size_t& outWritten) = 0;
     virtual bool seek(size_t absOffset) = 0;
     virtual size_t tell() const = 0;
 
@@ -24,10 +25,13 @@ public:
     // init() mounts or prepares the underlying storage.
     virtual bool init() = 0;
 
-    // openRead() returns a distinct file object.
+    // openRead() / openWrite() return distinct file objects.
     // Multiple files may be open concurrently.
     // The returned pointer remains valid until close() is called.
-    virtual IFile* openRead(const char* path) = 0; // returns nullptr on fail
+    virtual IFile* openRead(const char* path) = 0;                 // nullptr on fail
+    virtual IFile* openWrite(const char* path, bool truncate) = 0; // nullptr on fail
+
+    virtual bool exists(const char* path) const = 0;
 };
 
 } // namespace gv

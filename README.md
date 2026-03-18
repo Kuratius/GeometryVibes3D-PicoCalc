@@ -2,19 +2,29 @@
 
 A faithful RP2040 port of **Geometry Vibes 3D**, targeting the **ClockworkPi PicoCalc**.
 
-Current state: playable wireframe “fake 3D” implementation with a state-driven app flow, level progression, animated obstacle groups with rotation and scaling, gameplay-plane collision against static and animated geometry, and stable fixed-rate rendering on the ILI9488.
+Current state: playable wireframe “fake 3D” implementation with a state-driven app flow, persistent save data, animated obstacle groups with rotation and scaling, gameplay-plane collision against static and animated geometry, and stable fixed-rate rendering on the ILI9488.
 
 ## Features
 
 - **Fixed-point 3D** camera + projection
 - **State-machine app flow**
   - title screen
+  - home menu
+  - saved-games menu
+  - new-game name entry
   - level select
   - gameplay
-- **Streaming level playback** using the **GVL3 / 56-bit column format**
+  - options
+- **Persistent save system**
+  - up to **10 saved games**
+  - compact binary save file stored on SD card
+  - continue from the most recently played save
+  - delete saves from the saved-games menu
 - **Level-select menu**
   - highlighted selection
   - locked/unlocked level progression
+  - per-level completion percentage display
+  - `[Locked]` status for unavailable levels
 - **HUD layer** with:
   - controls hint
   - level label
@@ -41,6 +51,9 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
 - **Per-level colors**
   - background color
   - obstacle / wireframe color
+- **Runtime options**
+  - enable serial renderer stats output
+  - collision-highlight overlay
 
 ## Hardware / platform highlights
 
@@ -51,9 +64,12 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
   - stable **~30 FPS** pacing
 - **SD card + FAT32**
   - streams `levels/*.BIN` columns on demand
+  - loads and saves persistent game data
   - no full level load into RAM
 - **PicoCalc keyboard**
   - polled through the platform/input layer
+- **Southbridge integration**
+  - battery percentage and charging-state display in the overlay footer
 
 ## Rendering notes
 
@@ -63,6 +79,23 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
 - Cached screen-space text objects for HUD and menu rendering
 - Scene building and animated-group rendering are driven from level-streamed data
 - Animated group rendering supports rotation and uniform scaling around a shared pivot
+- Overlay/footer rendering supports battery state, warnings, and menu/status text
+
+## Save format
+
+The current runtime stores save data in a compact binary file on the SD card:
+
+- magic: `GVS`
+- versioned header
+- packed list of active save entries
+- up to **10 save entries**
+- each entry stores:
+  - save name
+  - unlocked level count
+  - per-level completion percentage
+  - reserved per-level stars data
+
+Deleting a save compacts the entry list and immediately rewrites the file.
 
 ## Level format
 

@@ -7,7 +7,7 @@
 
 namespace gv {
 
-class LevelSelectState final : public IAppState {
+class SavedGamesState final : public IAppState {
 public:
     void onEnter(App& app) override;
     void onExit(App& app) override;
@@ -16,18 +16,22 @@ public:
     void render(App& app, IDisplay& display, RenderList& rl) override;
 
 private:
-    static constexpr std::size_t kLevelTextCap = 10;
-
-    void rebuildTexts(App& app);
-    void buildMenu(App& app, RenderList& rl) const;
+    static constexpr std::size_t kTextCap = 10;
 
 private:
-    std::size_t selectedLevel_ = 0;
-    std::size_t levelCount_ = 0;
+    void rebuildTexts(App& app);
+    void clampSelection(App& app);
 
-    Text menuTitle_{ "SELECT LEVEL" };
+private:
+    bool confirmDelete_ = false;
+    std::size_t selected_ = 0;
+    std::size_t count_ = 0;
+
+    Text title_{ "SAVED GAMES" };
     Text help_{ "[DEL] Erase  [ESC] Back" };
-    std::array<Text, kLevelTextCap> levelTexts_{};
+    Text confirm1_{ "Delete this save?" };
+    Text confirm2_{ "[ENTER] Confirm  [BACK] Cancel" };
+    std::array<Text, kTextCap> saveTexts_{};
 };
 
 } // namespace gv

@@ -23,7 +23,7 @@ void TitleState::update(App& app, const InputState& in, uint32_t dtUs) {
 
     titleScreen_.update(in);
     if (titleScreen_.accepted()) {
-        app.showLevelSelect();
+        app.showHomeMenu();
     }
 }
 

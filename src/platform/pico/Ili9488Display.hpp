@@ -20,6 +20,9 @@ public:
     void draw(const RenderList& rl) override;
     void drawBitmap565(int x, int y, int w, int h, const uint16_t* pixels) override;
     void endFrame() override;
+
+    static bool serialOutputEnabled();
+    static void setSerialOutputEnabled(bool enabled);
     
     static constexpr int W = 320;
     static constexpr int H = 320;
@@ -84,11 +87,11 @@ private:
     static volatile int s_prod;
     static Ili9488Display* s_active;
 
-    #ifdef GV3D_TESTING
     int lastLines = 0;
     int lastBinned = 0;
     int lastTexts = 0;
-    #endif
+
+    static bool s_serialOutputEnabled;
 
     void lcdFillBlack();
     void initIfNeeded();

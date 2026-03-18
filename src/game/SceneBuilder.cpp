@@ -298,7 +298,6 @@ void SceneBuilder::trailDraw(RenderList& rl, const Camera& cam,
     }
 }
 
-#ifdef GV3D_TESTING
 void SceneBuilder::buildCollisionDebug(RenderList& rl, const Camera& cam, const Game& game) const {
     static constexpr uint16_t kCollisionDebug = 0xF800; // red
 
@@ -343,7 +342,6 @@ void SceneBuilder::buildCollisionDebug(RenderList& rl, const Camera& cam, const 
         }
     }
 }
-#endif
 
 void SceneBuilder::addShip(RenderList &rl, const Camera& cam, const Vec3fx &pos,
                            uint16_t color, fx shipY, fx shipVy) const {
@@ -728,10 +726,6 @@ void SceneBuilder::buildScene(RenderList& rl,
         }
         drawPortalRays(rl, cam, game, scrollX, portalRays, kWire);
     }
-
-#ifdef GV3D_TESTING
-    buildCollisionDebug(rl, cam, game);
-#endif
 
     const Vec3fx shipPos{ game.shipRenderX(), game.ship().y, fi(kCellSize/2) };
 

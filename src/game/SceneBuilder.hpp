@@ -72,6 +72,8 @@ public:
 
     void buildHud(RenderList& rl, const Game& game, int screenW, int screenH) const;
 
+    void buildCollisionDebug(RenderList& rl, const Camera& cam, const Game& game) const;
+
 private:
     void addShip(RenderList& rl, const Camera& cam, const Vec3fx& pos,
                  uint16_t color, fx shipY, fx shipVy) const;
@@ -114,10 +116,6 @@ private:
 
     void trailDraw(RenderList& rl, const Camera& cam,
                    const TrailState& trail, fx scrollX, uint16_t color) const;
-
-#ifdef GV3D_TESTING
-    void buildCollisionDebug(RenderList& rl, const Camera& cam, const Game& game) const;
-#endif
 };
 
 } // namespace gv

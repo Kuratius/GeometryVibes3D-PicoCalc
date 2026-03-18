@@ -18,6 +18,7 @@ public:
         kb_.init();
 
         refreshBatteryCache(true);
+        Ili9488Display::setSerialOutputEnabled(serialOutputEnabled_);
     }
 
     uint64_t nowUs() const override { return time_us_64(); }
@@ -40,6 +41,15 @@ public:
         return (batteryRaw_ & 0x80u) != 0;
     }
 
+    bool serialOutputEnabled() const override {
+        return serialOutputEnabled_;
+    }
+
+    void setSerialOutputEnabled(bool enabled) override {
+        serialOutputEnabled_ = enabled;
+        Ili9488Display::setSerialOutputEnabled(enabled);
+    }
+
     IDisplay& display() override { return disp_; }
     IFileSystem& fs() override { return fs_; }
     IInput& input() override { return kb_; }
@@ -59,13 +69,18 @@ private:
     }
 
 private:
-    Ili9488Display disp_;
-    PicoFileSystem fs_;
-    PicoKeyboardInput kb_;
-    PicoSouthbridge sb_;
+    Ili9488Display disp_{};
+    PicoFileSystem fs_{};
+    PicoKeyboardInput kb_{};
+    PicoSouthbridge sb_{};
+
     mutable uint8_t batteryRaw_ = 0;
     mutable uint64_t batteryCacheUs_ = 0;
     mutable bool batteryCacheValid_ = false;
+
+    bool serialOutputEnabled_ = false;
+    bool collisionHighlightEnabled_ = false;
+
     uint64_t last_{};
 };
 

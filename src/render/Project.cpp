@@ -179,15 +179,11 @@ static int32_t projectToNormal(int32_t* a, int32_t *normalVector)
     int64_t sum=0;
     for (int i=0; i<3;i++)
     {
-        int ta=a[i];
-        int tb=normalVector[i];
-        tb>>=1;//normal vector in 16.16 is 1.16
-        //after shifting down it is contained in the lower 16 bits
-        //below is a 48-bit multiply
-        sum+=((ta<<16)>>16)*tb;
-        sum+=(int64_t)((ta>>16)*tb)<<16;
+        int32_t ta=a[i]>>8;
+        int32_t tb=normalVector[i]>>8;
+        sum+=ta*tb;
     }
-    return sum>>15;//fx-shift minus 1
+    return sum;//fx-shift minus 1
 }
 
 fx static inline projectNormal3(Vec3fx v1, Vec3fx v2){
@@ -231,7 +227,7 @@ void buildCameraBasis(Camera& cam) {
 //to do: probably use 2.14 or 4.12 format for normalized vectors
 //to avoid 64 bit multiplications and do 32-bit muls instead
     cam.fwd   = normalize3(sub3(tgt, cam.pos));
-    cam.up    = normalize3(cam.up); //this probably isnt necessary?
+    //cam.up    = normalize3(cam.up); //this probably isnt necessary?
     cam.right = cross3_normal(cam.fwd, cam.up);
     cam.up2   = cross3_normal(cam.right, cam.fwd);
 }

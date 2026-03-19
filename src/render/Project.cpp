@@ -176,7 +176,7 @@ static inline Vec3fx normalize3(const Vec3fx& v)
 
 static int32_t projectToNormal(int32_t* a, int32_t *normalVector)
 {
-    int64_t sum=0;
+    int32_t sum=0;
     for (int i=0; i<3;i++)
     {
         int32_t ta=a[i]>>8;

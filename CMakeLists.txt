@@ -37,10 +37,15 @@ pico_sdk_init()
 add_executable(GeometryVibes3D-PicoCalc
     src/main.cpp
     src/app/App.cpp
+    src/app/SaveData.cpp
     src/app/TitleState.cpp
     src/app/TitleScreen.cpp
-    src/app/StatusOverlay.cpp
     src/app/PlayingState.cpp
+    src/app/NewGameState.cpp
+    src/app/OptionsState.cpp
+    src/app/StatusOverlay.cpp
+    src/app/HomeMenuState.cpp
+    src/app/SavedGamesState.cpp
     src/app/LevelSelectState.cpp
     src/app/StatusOverlayView.cpp
     src/game/Hud.cpp

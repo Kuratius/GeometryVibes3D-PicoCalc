@@ -18,6 +18,7 @@ static dma_channel_config g_dma_cfg;
 static constexpr uint32_t TAG_FRAME = 0xF00D0000;
 static constexpr uint32_t TAG_DONE  = 0xD00E0000;
 
+bool Ili9488Display::s_serialOutputEnabled = false;
 static uint16_t s_slabBuf[2][Ili9488Display::W * Ili9488Display::SLAB_ROWS];
 
 Ili9488Display::Frame Ili9488Display::s_frame[2];
@@ -138,11 +139,11 @@ void Ili9488Display::draw(const RenderList& rl) {
     binFrameLines(f);
     binFrameFillRects(f);
     binFrameTexts(f);
-    #ifdef GV3D_TESTING
-    lastLines  = f.lineCount;
-    lastBinned = f.lineBinnedTotal;
-    lastTexts  = f.textCount;
-    #endif
+    if (s_serialOutputEnabled) {
+        lastLines  = f.lineCount;
+        lastBinned = f.lineBinnedTotal;
+        lastTexts  = f.textCount;
+    }
 }
 
 void Ili9488Display::drawBitmap565(int x, int y, int w, int h, const uint16_t* pixels) {
@@ -212,20 +213,28 @@ void Ili9488Display::endFrame() {
         }
     }
 
-    #ifdef GV3D_TESTING
-    static uint32_t frames = 0;
-    static uint64_t t0 = 0;
-    if (t0 == 0) t0 = time_us_64();
-    ++frames;
+    if (s_serialOutputEnabled) {
+        static uint32_t frames = 0;
+        static uint64_t t0 = 0;
+        if (t0 == 0) t0 = time_us_64();
+        ++frames;
 
-    const uint64_t now = time_us_64();
-    if (now - t0 >= 1000000) {
-        std::printf("SPI:%u FPS:%u Lines:%d Binned:%d\n",
-                    g_baud, frames, lastLines, lastBinned);
-        frames = 0;
-        t0 = now;
+        const uint64_t now = time_us_64();
+        if (now - t0 >= 1000000) {
+            std::printf("SPI:%u FPS:%u Lines:%d Binned:%d\n",
+                        g_baud, frames, lastLines, lastBinned);
+            frames = 0;
+            t0 = now;
+        }
     }
-    #endif
+}
+
+bool Ili9488Display::serialOutputEnabled() {
+    return s_serialOutputEnabled;
+}
+
+void Ili9488Display::setSerialOutputEnabled(bool enabled) {
+    s_serialOutputEnabled = enabled;
 }
 
 void Ili9488Display::lcdFillBlack() {

@@ -67,6 +67,8 @@ void PlayingState::update(App& app, const InputState& in, uint32_t dtUs) {
     game.update(in, dt);
 
     if (prevState != RunState::Dead && game.state() == RunState::Dead) {
+        app.saveCurrentProgress();
+
         const uint64_t t = app.platform().nowUs();
         const uint32_t seed = uint32_t(t) ^ uint32_t(t >> 32);
         sceneBuilder_.startShipExplosion(explosion_, game, seed);
@@ -77,20 +79,20 @@ void PlayingState::update(App& app, const InputState& in, uint32_t dtUs) {
 
     if (game.state() == RunState::Dead && !explosion_.active) {
         if (in.thrustPressed) {
+            app.saveCurrentProgress();
             returnToLevelSelect(app);
             return;
         }
     }
 
     if (game.finishedScroll()) {
-        if (app.selectedLevel() + 1 == app.unlockedLevelCount()) {
-            app.unlockNextLevel();
-        }
+        app.saveLevelCompletion(app.selectedLevel());
         returnToLevelSelect(app);
         return;
     }
 
     if (in.back) {
+        app.saveCurrentProgress();
         returnToLevelSelect(app);
         return;
     }
@@ -113,6 +115,11 @@ void PlayingState::update(App& app, const InputState& in, uint32_t dtUs) {
 void PlayingState::render(App& app, IDisplay& display, RenderList& rl) {
     rl.clear();
     sceneBuilder_.buildScene(rl, cam_, app.game(), app.game().scrollX(), trail_, explosion_, portalRays_);
+
+     if (app.game().collisionHighlightEnabled()) {
+        sceneBuilder_.buildCollisionDebug(rl, cam_, app.game());
+    }
+
     sceneBuilder_.buildHud(rl, app.game(), app.displayWidth(), app.displayHeight());
     StatusOverlayView::appendTo(
         rl,

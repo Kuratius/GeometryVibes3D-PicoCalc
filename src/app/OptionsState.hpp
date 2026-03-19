@@ -7,7 +7,7 @@
 
 namespace gv {
 
-class LevelSelectState final : public IAppState {
+class OptionsState final : public IAppState {
 public:
     void onEnter(App& app) override;
     void onExit(App& app) override;
@@ -16,18 +16,21 @@ public:
     void render(App& app, IDisplay& display, RenderList& rl) override;
 
 private:
-    static constexpr std::size_t kLevelTextCap = 10;
-
-    void rebuildTexts(App& app);
-    void buildMenu(App& app, RenderList& rl) const;
+    enum Item : std::size_t {
+        SerialOutput = 0,
+        HighlightCollision,
+        Count
+    };
 
 private:
-    std::size_t selectedLevel_ = 0;
-    std::size_t levelCount_ = 0;
+    void rebuildTexts(App& app);
 
-    Text menuTitle_{ "SELECT LEVEL" };
-    Text help_{ "[DEL] Erase  [ESC] Back" };
-    std::array<Text, kLevelTextCap> levelTexts_{};
+private:
+    std::size_t selected_ = 0;
+
+    Text title_{ "OPTIONS" };
+    Text help_{ "[ENTER/SPACE] Toggle  [BACK] Home" };
+    std::array<Text, Count> items_{};
 };
 
 } // namespace gv

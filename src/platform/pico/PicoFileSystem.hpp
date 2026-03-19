@@ -9,6 +9,7 @@ public:
     explicit PicoFile(FILE* f) : f_(f) {}
 
     bool read(void* dst, size_t bytes, size_t& outRead) override;
+    bool write(const void* src, size_t bytes, size_t& outWritten) override;
     bool seek(size_t absOffset) override;
     size_t tell() const override;
 
@@ -23,6 +24,8 @@ class PicoFileSystem final : public IFileSystem {
 public:
     bool init() override;
     IFile* openRead(const char* path) override;
+    IFile* openWrite(const char* path, bool truncate) override;
+    bool exists(const char* path) const override;
 
 private:
     bool inited_ = false;

@@ -23,7 +23,6 @@ enum class RunState : uint8_t {
     Dead
 };
 
-#ifdef GV3D_TESTING
 struct CollisionDebugPrimitive {
     ObstacleId sid = ObstacleId::Empty;
     ShapeMod mod = ShapeMod::None;
@@ -46,7 +45,6 @@ struct CollisionDebugPrimitive {
     fx groupSin = fx::zero();
     fx groupScale = fx::one();
 };
-#endif
 
 struct LoadedAnimGroupDef {
     AnimGroupDefHeader hdr{};
@@ -90,7 +88,9 @@ public:
     bool collided() const { return hit; }
     void clearCollision() { hit = false; }
 
-#ifdef GV3D_TESTING
+    bool collisionHighlightEnabled() const { return collisionHighlightEnabled_; }
+    void setCollisionHighlightEnabled(bool enabled) { collisionHighlightEnabled_ = enabled; }
+
     static constexpr std::size_t kCollisionDebugCap = 128;
 
     const StaticVector<CollisionDebugPrimitive, kCollisionDebugCap>& collisionDebugPrimitives() const {
@@ -100,7 +100,6 @@ public:
     void clearCollisionDebugPrimitives() const {
         collisionDebugPrimitives_.clear();
     }
-#endif
 
     int progressPercent() const;
 
@@ -152,9 +151,8 @@ private:
     std::array<fx, kMaxAnimGroupDefs> animGroupAngleTurns_{};
     std::array<fx, kMaxAnimGroupDefs> animGroupScale_{};
 
-#ifdef GV3D_TESTING
+    bool collisionHighlightEnabled_ = false;
     mutable StaticVector<CollisionDebugPrimitive, kCollisionDebugCap> collisionDebugPrimitives_{};
-#endif
 };
 
 } // namespace gv

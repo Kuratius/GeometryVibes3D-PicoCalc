@@ -442,9 +442,9 @@ void Game::reset() {
     hud_.setControlsHint(kControlsHintStart);
     unloadLevel();
 
-#ifdef GV3D_TESTING
-    collisionDebugPrimitives_.clear();
-#endif
+    if (collisionHighlightEnabled_) {
+        collisionDebugPrimitives_.clear();
+    }
 }
 
 bool Game::loadAnimDefs() {
@@ -623,9 +623,9 @@ void Game::unloadLevel() {
     std::memset(&levelHdr, 0, sizeof(levelHdr));
     clearAnimDefs();
 
-#ifdef GV3D_TESTING
-    collisionDebugPrimitives_.clear();
-#endif
+    if (collisionHighlightEnabled_) {
+        collisionDebugPrimitives_.clear();
+    }
 }
 
 bool Game::readLevelColumn(uint16_t i, Column56& out) const {
@@ -736,9 +736,9 @@ bool Game::checkCollisionAt(fx shipY) const {
     const fx sx = fx::fromInt(kShipFixedX);
     const fx r = fx::fromInt(kCellSize / 4);
 
-#ifdef GV3D_TESTING
-    collisionDebugPrimitives_.clear();
-#endif
+    if (collisionHighlightEnabled_) {
+        collisionDebugPrimitives_.clear();
+    }
 
     // ---- Static obstacle neighborhood ----
     const fx x0 = xScroll - r;
@@ -833,25 +833,25 @@ bool Game::checkCollisionAt(fx shipY) const {
                     const fx primOriginX = primCenterX - halfCellFx();
                     const fx primOriginY = primCenterY - halfCellFx();
 
-#ifdef GV3D_TESTING
-                    (void)collisionDebugPrimitives_.push_back(CollisionDebugPrimitive{
-                        p.obstacle,
-                        p.mod,
-                        primOriginX,
-                        primOriginY,
-                        fx::zero(),
-                        primCenterX,
-                        primCenterY,
-                        fx::fromInt(kCellSize / 2),
-                        true,
-                        groupPivotX,
-                        groupPivotY,
-                        fx::fromInt(kCellSize / 2),
-                        gc,
-                        gs,
-                        groupScale
-                    });
-#endif
+                    if (collisionHighlightEnabled_) {
+                        (void)collisionDebugPrimitives_.push_back(CollisionDebugPrimitive{
+                            p.obstacle,
+                            p.mod,
+                            primOriginX,
+                            primOriginY,
+                            fx::zero(),
+                            primCenterX,
+                            primCenterY,
+                            fx::fromInt(kCellSize / 2),
+                            true,
+                            groupPivotX,
+                            groupPivotY,
+                            fx::fromInt(kCellSize / 2),
+                            gc,
+                            gs,
+                            groupScale
+                        });
+                    }
 
                     const fx lx = sxLocal - primOriginX;
                     const fx ly = syLocal - primOriginY;
@@ -877,25 +877,25 @@ bool Game::checkCollisionAt(fx shipY) const {
             const fx rowY0 = worldYForRow(row);
             const fx ly = sy - rowY0;
 
-#ifdef GV3D_TESTING
-            (void)collisionDebugPrimitives_.push_back(CollisionDebugPrimitive{
-                sid,
-                mid,
-                worldX,
-                rowY0,
-                fx::zero(),
-                worldX + halfCellFx(),
-                rowY0 + halfCellFx(),
-                fx::fromInt(kCellSize / 2),
-                false,
-                fx::zero(),
-                fx::zero(),
-                fx::zero(),
-                fx::one(),
-                fx::zero(),
-                fx::one()
-            });
-#endif
+            if (collisionHighlightEnabled_) {
+                (void)collisionDebugPrimitives_.push_back(CollisionDebugPrimitive{
+                    sid,
+                    mid,
+                    worldX,
+                    rowY0,
+                    fx::zero(),
+                    worldX + halfCellFx(),
+                    rowY0 + halfCellFx(),
+                    fx::fromInt(kCellSize / 2),
+                    false,
+                    fx::zero(),
+                    fx::zero(),
+                    fx::zero(),
+                    fx::one(),
+                    fx::zero(),
+                    fx::one()
+                });
+            }
 
             if (collideCell(sid, mid, staticLx, ly, shipState.vy)) {
                 return true;

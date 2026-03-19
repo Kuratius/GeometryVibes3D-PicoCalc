@@ -56,6 +56,168 @@ void updateBatteryFooter(StatusOverlay& overlay,
 
 } // namespace
 
+const SaveData::SaveEntry* App::activeSave() const {
+    return hasActiveSave() ? saveData_.entry(activeSaveIndex_) : nullptr;
+}
+
+bool App::loadSaves() {
+    if (!plat_) return false;
+
+    if (!saveData_.load(plat_->fs())) {
+        return false;
+    }
+
+    if (saveData_.hasLastPlayed()) {
+        activeSaveIndex_ = saveData_.lastPlayedIndex();
+        syncRuntimeProgressFromActiveSave();
+    } else {
+        activeSaveIndex_ = SaveData::kNoSelection;
+        unlockedLevelCount_ = 1;
+        selectedLevel_ = 0;
+    }
+
+    return true;
+}
+
+bool App::saveSaves() const {
+    if (!plat_) return false;
+    return saveData_.save(plat_->fs());
+}
+
+bool App::createNewSave(const char* name) {
+    uint8_t index = SaveData::kNoSelection;
+    if (!saveData_.createEntry(name, index)) {
+        return false;
+    }
+
+    activeSaveIndex_ = index;
+    saveData_.setLastPlayedIndex(index);
+    syncRuntimeProgressFromActiveSave();
+    return saveSaves();
+}
+
+bool App::selectSave(std::size_t index) {
+    if (index >= saveData_.entryCount()) {
+        return false;
+    }
+
+    activeSaveIndex_ = static_cast<uint8_t>(index);
+    if (!saveData_.setLastPlayedIndex(activeSaveIndex_)) {
+        return false;
+    }
+
+    syncRuntimeProgressFromActiveSave();
+    return saveSaves();
+}
+
+bool App::deleteSave(std::size_t index) {
+    if (index >= saveData_.entryCount()) {
+        return false;
+    }
+
+    if (!saveData_.deleteEntry(index)) {
+        return false;
+    }
+
+    if (saveData_.hasLastPlayed()) {
+        activeSaveIndex_ = saveData_.lastPlayedIndex();
+        syncRuntimeProgressFromActiveSave();
+    } else {
+        activeSaveIndex_ = SaveData::kNoSelection;
+        unlockedLevelCount_ = 1;
+        selectedLevel_ = 0;
+    }
+
+    return saveSaves();
+}
+
+bool App::canContinue() const {
+    return hasAnySave() && saveData_.hasLastPlayed();
+}
+
+bool App::continueGame() {
+    if (!canContinue()) {
+        return false;
+    }
+
+    const uint8_t idx = saveData_.lastPlayedIndex();
+    if (idx >= saveData_.entryCount()) {
+        return false;
+    }
+
+    activeSaveIndex_ = idx;
+    syncRuntimeProgressFromActiveSave();
+
+    const std::size_t frontier =
+        (unlockedLevelCount_ > 0) ? (unlockedLevelCount_ - 1) : 0;
+
+    return startLevel(frontier);
+}
+
+void App::syncRuntimeProgressFromActiveSave() {
+    if (!hasActiveSave()) {
+        unlockedLevelCount_ = 1;
+        selectedLevel_ = 0;
+        return;
+    }
+
+    const SaveData::SaveEntry* e = saveData_.entry(activeSaveIndex_);
+    if (!e) {
+        unlockedLevelCount_ = 1;
+        selectedLevel_ = 0;
+        return;
+    }
+
+#ifdef GV3D_TESTING
+    unlockedLevelCount_ = kLevelCount;
+#else
+    std::size_t unlocked = e->unlockedCount;
+    if (unlocked < 1) unlocked = 1;
+    if (unlocked > kLevelCount) unlocked = kLevelCount;
+    unlockedLevelCount_ = unlocked;
+#endif
+
+    selectedLevel_ = (unlockedLevelCount_ > 0) ? (unlockedLevelCount_ - 1) : 0;
+    if (selectedLevel_ >= kLevelCount) {
+        selectedLevel_ = kLevelCount - 1;
+    }
+}
+
+bool App::saveCurrentProgress() {
+    if (!hasActiveSave()) return false;
+    if (selectedLevel_ >= kLevelCount) return false;
+
+    SaveData::SaveEntry* e = saveData_.entry(activeSaveIndex_);
+    if (!e) return false;
+
+    const uint8_t progress = static_cast<uint8_t>(game_.progressPercent());
+    if (progress > e->percentComplete[selectedLevel_]) {
+        e->percentComplete[selectedLevel_] = progress;
+    }
+
+    return saveSaves();
+}
+
+bool App::saveLevelCompletion(std::size_t levelIndex) {
+    if (!hasActiveSave()) return false;
+    if (levelIndex >= kLevelCount) return false;
+
+    SaveData::SaveEntry* e = saveData_.entry(activeSaveIndex_);
+    if (!e) return false;
+
+    e->percentComplete[levelIndex] = 100;
+
+#ifndef GV3D_TESTING
+    const std::size_t frontier = (e->unlockedCount > 0) ? (e->unlockedCount - 1) : 0;
+    if (levelIndex == frontier && e->unlockedCount < kLevelCount) {
+        ++e->unlockedCount;
+    }
+#endif
+
+    syncRuntimeProgressFromActiveSave();
+    return saveSaves();
+}
+
 std::size_t App::unlockedLevelCount() const {
 #ifdef GV3D_TESTING
     return kLevelCount;
@@ -69,14 +231,6 @@ bool App::isLevelUnlocked(std::size_t i) const {
     return i < kLevelCount;
 #else
     return i < unlockedLevelCount_;
-#endif
-}
-
-void App::unlockNextLevel() {
-#ifndef GV3D_TESTING
-    if (unlockedLevelCount_ < kLevelCount) {
-        ++unlockedLevelCount_;
-    }
 #endif
 }
 
@@ -106,6 +260,22 @@ void App::changeState(IAppState& next) {
 
 void App::showTitle() {
     changeState(titleState_);
+}
+
+void App::showHomeMenu() {
+    changeState(homeMenuState_);
+}
+
+void App::showNewGame() {
+    changeState(newGameState_);
+}
+
+void App::showSavedGames() {
+    changeState(savedGamesState_);
+}
+
+void App::showOptions() {
+    changeState(optionsState_);
 }
 
 void App::showLevelSelect() {
@@ -205,6 +375,11 @@ void App::init(IPlatform& platform) {
     statusOverlay_.clear();
     selectedLevel_ = 0;
     unlockedLevelCount_ = 1;
+    activeSaveIndex_ = SaveData::kNoSelection;
+
+    if (!loadSaves()) {
+        statusOverlay_.addWarning("Could not load saves");
+    }
 
     showTitle();
 }

@@ -181,9 +181,10 @@ static int32_t projectToNormal(int32_t* a, int32_t *normalVector)
     {
         int32_t ta=a[i]>>8;
         int32_t tb=normalVector[i]>>8;
+        //workaround until I figure out a better way
         sum+=ta*tb;
     }
-    return sum;//fx-shift minus 1
+    return sum;
 }
 
 fx static inline projectNormal3(Vec3fx v1, Vec3fx v2){

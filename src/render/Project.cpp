@@ -244,22 +244,9 @@ bool projectPoint(const Camera& cam, const Vec3fx& world, Vec2i& out)
 {
     // Transform world -> view using precomputed basis
     Vec3fx v = sub3(world, cam.pos);
-#if 1 //enabling this breaks rendering for some reason
-        //if this is the same bug as on pico2
-        //then the code is probably too fast
-        //and causes a race condition
-        //or the camera vector isnt normalized yet
-        //at this point in time?
     fx x = projectNormal3(v, cam.right);
     fx y = projectNormal3(v, cam.up2);
     fx z = projectNormal3(v, cam.fwd);
-#else
-    fx x = dot3(v, cam.right);
-    fx y = dot3(v, cam.up2);
-    fx z = dot3(v, cam.fwd);
-
-#endif
-
 
     if (z.raw() <= (1 << fx::SHIFT) / 8) return false;
 

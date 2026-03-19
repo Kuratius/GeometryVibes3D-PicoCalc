@@ -1,13 +1,15 @@
 #include "Project.hpp"
 #include <cstdint>
 
+#define unlikely(x) __builtin_expect((x), 0)
+
 namespace gv {
 
 // ---- small fixed helpers (local) ----
 static inline int64_t iabs64(int64_t x) { return x < 0 ? -x : x; }
 
 // Integer sqrt for uint64 (floor)
-uint32_t isqrt_u64(uint64_t x) {
+static uint32_t isqrt_u64(uint64_t x) {
     uint64_t op = x;
     uint64_t res = 0;
     uint64_t one = 1ULL << 62; // highest power of four <= 2^64
@@ -25,14 +27,14 @@ uint32_t isqrt_u64(uint64_t x) {
     return res;
 }
 
-static inline fx dot3(const Vec3fx& a, const Vec3fx& b) {
+static fx dot3(const Vec3fx& a, const Vec3fx& b) {
     int64_t sx = (int64_t)a.x.raw() * (int64_t)b.x.raw();
     int64_t sy = (int64_t)a.y.raw() * (int64_t)b.y.raw();
     int64_t sz = (int64_t)a.z.raw() * (int64_t)b.z.raw();
     return fx::fromRaw((int32_t)((sx + sy + sz) >> fx::SHIFT));
 }
 
-Vec3fx cross3(const Vec3fx& a, const Vec3fx& b) {
+static Vec3fx cross3(const Vec3fx& a, const Vec3fx& b) {
     int64_t ax = a.x.raw(), ay = a.y.raw(), az = a.z.raw();
     int64_t bx = b.x.raw(), by = b.y.raw(), bz = b.z.raw();
 
@@ -47,35 +49,44 @@ static inline Vec3fx sub3(const Vec3fx& a, const Vec3fx& b) {
     return Vec3fx{ a.x - b.x, a.y - b.y, a.z - b.z };
 }
 
-#define unlikely(x) __builtin_expect((x), 0)
-static inline uint32_t sqrt_core(uint32_t x, uint32_t y)
+
+static uint32_t sqrt_core(uint32_t xyy, uint32_t y)
 {
-    x>>=1;
-    uint32_t t=x+(x>>1);
+    //this can be reused for a sqrt instead of rsqrt
+    //by setting y to the correct value
+    xyy>>=1;
+    uint32_t t=xyy+(xyy>>1);
     if (t < (1u<<31)){ //first iteration is special cased
         t+=t>>1;
         if (t < (1u<<31)) {
-            x=t;
+            xyy=t;
             y+=y>>1;
         }
     }
-    //I looked at the codegen for this
-    //unroll is needed on cortex M33
-    //on M0plus it kinda doesnt matter
-    #ifdef CORTEXM33
-    #pragma GCC unroll 8
-    #endif
-    for (uint32_t i =2; i<8; i+=1){
-        uint32_t t=x+(x>>i);
+    //you can probably get 10-20% more speed out of this with inline assembler
+    //or an unroll
+    //but thumb assembly is torture compared to arm
+    for (uint32_t i =2; i<8; i+=1)
+    {
+        uint32_t t=xyy+(xyy>>i);
         t+=t>>i;
         if (t < (1u<<31)) {
-            x=t;
+            xyy=t;
             y+=y>>i;
         }
     }
-    uint32_t hi =(x>>16)*(y>>16);//the lower 16 digits are noise anyway
+    //the following steps perform a hidden newton iteration
+    //the calculation above guarantees x wont have bit 31 set
+    //so we only need to shift down by 15
+    y>>=16;
+    uint32_t hi =(xyy>>15)*(y);
+    y<<=16;
+    //using the upper bits of a 32x32->64 multiply
+    //improves accuracy, but
+    //the lower 16 digits are noise anyway
+    //and we dont have widening multiply on cortex-m0plus
     y+=y>>1; //this can overflow
-    return ((y)-(hi) ); //but then this underflows so they cancel
+    return ((y)-(hi>>1) ); //but then this underflows so they cancel
 }
 
 
@@ -87,7 +98,7 @@ static inline uint32_t sqrt64_helper(uint64_t m, int * exp)
     ilog2<<=1;
     int shift=30-ilog2;
     m= shift>=0 ? m<<shift : m>>-shift;
-    int shift2=22-(shift>>1);
+    int shift2=30-(shift>>1);
     *exp=shift2;
     return sqrt_core(m, 1<<30);
 }
@@ -111,13 +122,14 @@ void normalize_32(int32_t * a)
         return;
     int exp;
     uint32_t res=sqrt64_helper(squared_magnitude, &exp)>>16;
-    exp+=12-4-16;
+    exp+=-16;
     for(int i=0; i<3;i++)
     {
         int32_t t=a[i];
         uint32_t tu=t;
         if (t<0)
             tu=-tu;
+        //32x16->48 bit multiply
         uint64_t prod=((tu<<16)>>16)*res;
         prod+=(uint64_t)((tu>>16)*res)<<16;
         prod= exp >=0 ? prod>>exp : prod<<-exp;
@@ -162,20 +174,92 @@ static inline Vec3fx normalize3(const Vec3fx& v)
 
 
 
-void buildCameraBasis(Camera& cam) {
-    Vec3fx tgt = cam.target;
-
-    cam.fwd   = normalize3(sub3(tgt, cam.pos));
-    cam.right = normalize3(cross3(cam.fwd, cam.up));
-    cam.up2   = cross3(cam.right, cam.fwd);
+static int32_t projectToNormal(int32_t* a, int32_t *normalVector)
+{
+    int64_t sum=0;
+    for (int i=0; i<3;i++)
+    {
+        int ta=a[i];
+        int tb=normalVector[i];
+        tb>>=1;//normal vector in 16.16 is 1.16
+        //after shifting down it is contained in the lower 16 bits
+        //below is a 48-bit multiply
+        sum+=((ta<<16)>>16)*tb;
+        sum+=(int64_t)((ta>>16)*tb)<<16;
+    }
+    return sum>>15;//fx-shift minus 1
 }
 
-bool projectPoint(const Camera& cam, const Vec3fx& world, Vec2i& out) {
+fx static inline projectNormal3(Vec3fx v1, Vec3fx v2){
+
+    int32_t a[3]={v1.x.raw(),v1.y.raw(), v1.z.raw()};
+    int32_t b[3]={v2.x.raw(),v2.y.raw(), v2.z.raw()};
+
+    return fx::fromRaw(projectToNormal(&a[0], &b[0]));
+}
+
+
+
+
+static void normal_cross(int32_t* a, int32_t *b,int32_t * resultVector)
+{
+    int32_t ta[3] = {a[0]>>1, a[1]>>1, a[2]>>1};
+    int32_t tb[3] = {b[0]>>1, b[1]>>1, b[2]>>1};
+    //the above is just so we dont need the restrict qualifier
+    //otherwise the compiler assumes they might overlap with the result
+    resultVector[0] = ((int32_t)ta[1] * tb[2] + (int32_t)-tb[1] * ta[2]) >> 14;
+    resultVector[1] = ((int32_t)ta[2] * tb[0] + (int32_t)tb[2] * -ta[0]) >> 14;
+    resultVector[2] = ((int32_t)-ta[0] * -tb[1] + (int32_t)-tb[0] * ta[1]) >> 14;
+}
+
+Vec3fx static inline cross3_normal(Vec3fx v1, Vec3fx v2)
+{
+    int32_t a[3]={v1.x.raw(),v1.y.raw(), v1.z.raw()};
+    int32_t b[3]={v2.x.raw(),v2.y.raw(), v2.z.raw()};
+    int32_t result[3];
+    normal_cross(&a[0], &b[0], &result[0]);
+	Vec3fx out;
+	out.x=fx::fromRaw(result[0]);
+	out.y=fx::fromRaw(result[1]);
+	out.z=fx::fromRaw(result[2]);
+    return out;
+}
+
+
+void buildCameraBasis(Camera& cam) {
+    Vec3fx tgt = cam.target;
+//to do: probably use 2.14 or 4.12 format for normalized vectors
+//to avoid 64 bit multiplications and do 32-bit muls instead
+    cam.fwd   = normalize3(sub3(tgt, cam.pos));
+    cam.up    = normalize3(cam.up); //this probably isnt necessary?
+    cam.right = cross3_normal(cam.fwd, cam.up);
+    cam.up2   = cross3_normal(cam.right, cam.fwd);
+}
+
+
+
+
+
+bool projectPoint(const Camera& cam, const Vec3fx& world, Vec2i& out)
+{
     // Transform world -> view using precomputed basis
     Vec3fx v = sub3(world, cam.pos);
+#if 1 //enabling this breaks rendering for some reason
+        //if this is the same bug as on pico2
+        //then the code is probably too fast
+        //and causes a race condition
+        //or the camera vector isnt normalized yet
+        //at this point in time?
+    fx x = projectNormal3(v, cam.right);
+    fx y = projectNormal3(v, cam.up2);
+    fx z = projectNormal3(v, cam.fwd);
+#else
     fx x = dot3(v, cam.right);
     fx y = dot3(v, cam.up2);
     fx z = dot3(v, cam.fwd);
+
+#endif
+
 
     if (z.raw() <= (1 << fx::SHIFT) / 8) return false;
 

@@ -5,6 +5,8 @@
 #include "render/RenderList.hpp"
 #include "StatusOverlay.hpp"
 #include "IAppState.hpp"
+#include "SaveData.hpp"
+
 #include "TitleState.hpp"
 #include "HomeMenuState.hpp"
 #include "NewGameState.hpp"
@@ -12,8 +14,7 @@
 #include "OptionsState.hpp"
 #include "LevelSelectState.hpp"
 #include "PlayingState.hpp"
-#include "StatusOverlayView.hpp"
-#include "SaveData.hpp"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -62,14 +63,12 @@ public:
 
     bool hasAnySave() const { return saveData_.entryCount() > 0; }
     bool hasMultipleSaves() const { return saveData_.entryCount() > 1; }
-
     bool hasActiveSave() const {
         return activeSaveIndex_ != SaveData::kNoSelection &&
                activeSaveIndex_ < saveData_.entryCount();
     }
 
     uint8_t activeSaveIndex() const { return activeSaveIndex_; }
-    const SaveData::SaveEntry* activeSave() const;
 
     bool loadSaves();
     bool saveSaves() const;
@@ -102,6 +101,7 @@ public:
 private:
     void init(IPlatform& platform);
     InputState pollInput() const;
+    void clearActiveSaveState();
 
 private:
     static constexpr LevelEntry kLevels[] = {
@@ -119,30 +119,33 @@ private:
     static constexpr std::size_t kLevelCount = sizeof(kLevels) / sizeof(kLevels[0]);
 
 private:
+    // Platform / frame state
     IPlatform* plat_ = nullptr;
-
+    int w_ = 0;
+    int h_ = 0;
+    
+    // Core app data
     Game game_{};
-    RenderList frame_{};
     StatusOverlay statusOverlay_{};
     SaveData saveData_{};
+    
+    // Runtime save/progression state
+    std::size_t selectedLevel_ = 0;
+    std::size_t unlockedLevelCount_ = 1;
+    uint8_t activeSaveIndex_ = SaveData::kNoSelection;
+    
+    // Per-frame render scratch
+    RenderList frame_{};
 
+    // App state machine
+    TitleState titleState_{};
     HomeMenuState homeMenuState_{};
     NewGameState newGameState_{};
     SavedGamesState savedGamesState_{};
     OptionsState optionsState_{};
     LevelSelectState levelSelectState_{};
     PlayingState playingState_{};
-
     IAppState* currentState_ = nullptr;
-
-    int w_ = 0;
-    int h_ = 0;
-    std::size_t selectedLevel_ = 0;
-    std::size_t unlockedLevelCount_ = 1;
-
-    uint8_t activeSaveIndex_ = SaveData::kNoSelection;
-
-    TitleState titleState_{};
 };
 
 } // namespace gv

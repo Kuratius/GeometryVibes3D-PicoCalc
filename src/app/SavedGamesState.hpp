@@ -10,7 +10,6 @@ namespace gv {
 class SavedGamesState final : public IAppState {
 public:
     void onEnter(App& app) override;
-    void onExit(App& app) override;
 
     void update(App& app, const InputState& in, uint32_t dtUs) override;
     void render(App& app, IDisplay& display, RenderList& rl) override;
@@ -30,7 +29,7 @@ private:
     Text title_{ "SAVED GAMES" };
     Text help_{ "[DEL] Erase  [ESC] Back" };
     Text confirm1_{ "Delete this save?" };
-    Text confirm2_{ "[ENTER] Confirm  [BACK] Cancel" };
+    Text confirm2_{ "[ENTER] Confirm  [ESC] Cancel" };
     std::array<Text, kTextCap> saveTexts_{};
 };
 

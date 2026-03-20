@@ -10,7 +10,6 @@ namespace gv {
 class OptionsState final : public IAppState {
 public:
     void onEnter(App& app) override;
-    void onExit(App& app) override;
 
     void update(App& app, const InputState& in, uint32_t dtUs) override;
     void render(App& app, IDisplay& display, RenderList& rl) override;
@@ -29,7 +28,7 @@ private:
     std::size_t selected_ = 0;
 
     Text title_{ "OPTIONS" };
-    Text help_{ "[ENTER/SPACE] Toggle  [BACK] Home" };
+    Text help_{ "[ENTER/SPACE] Toggle  [ESC] Home" };
     std::array<Text, Count> items_{};
 };
 

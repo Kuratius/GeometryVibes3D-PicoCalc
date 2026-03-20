@@ -1,6 +1,5 @@
 #include "LevelSelectState.hpp"
 #include "App.hpp"
-#include "platform/IPlatform.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
 #include <cstdio>
@@ -10,10 +9,6 @@ namespace gv {
 void LevelSelectState::onEnter(App& app) {
     selectedLevel_ = app.selectedLevel();
     rebuildTexts(app);
-}
-
-void LevelSelectState::onExit(App& app) {
-    (void)app;
 }
 
 void LevelSelectState::rebuildTexts(App& app) {

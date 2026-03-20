@@ -1,8 +1,5 @@
 #include "PlayingState.hpp"
 #include "App.hpp"
-#include "core/Config.hpp"
-#include "game/Game.hpp"
-#include "platform/IPlatform.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
 
@@ -30,10 +27,6 @@ void PlayingState::resetPresentationState() {
 void PlayingState::onEnter(App& app) {
     resetPresentationState();
     setupDefaultCamera(app);
-}
-
-void PlayingState::onExit(App& app) {
-    (void)app;
 }
 
 void PlayingState::returnToLevelSelect(App& app) {

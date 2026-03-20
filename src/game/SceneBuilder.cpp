@@ -47,6 +47,23 @@ static inline void turnsToSinCos(fx turns, fx& c, fx& s) {
     s = fx::fromRaw(int32_t(std::lround(std::sin(a) * double(1 << fx::SHIFT))));
 }
 
+static inline Vec3fx makeVec3(fx x, fx y, fx z) {
+    return Vec3fx{ x, y, z };
+}
+
+static inline void addStarLine(RenderList& rl,
+                               const Camera& cam,
+                               const Vec3fx& center,
+                               fx x0, fx y0,
+                               fx x1, fx y1,
+                               uint16_t color) {
+    line3(
+        makeVec3(center.x + x0, center.y + y0, center.z),
+        makeVec3(center.x + x1, center.y + y1, center.z),
+        color, cam, rl
+    );
+}
+
 static inline void rotateXYAround(Vec3fx& p, const Vec3fx& pivot, fx c, fx s) {
     const fx dx = p.x - pivot.x;
     const fx dy = p.y - pivot.y;
@@ -233,6 +250,47 @@ void SceneBuilder::drawPortalRays(RenderList& rl, const Camera& cam, const Game&
         };
 
         line3(a, b, color, cam, rl);
+    }
+}
+
+void SceneBuilder::drawLevelStars(RenderList& rl,
+                                  const Camera& cam,
+                                  const Game& game,
+                                  fx scrollX,
+                                  uint16_t color) const {
+    if (!game.hasLevel()) return;
+    if (game.starCount() == 0) return;
+
+    static constexpr uint32_t kStarSpinPeriodMs = 2400;
+
+    for (const auto& star : game.levelStars()) {
+        if (game.starCollected(star.index)) {
+            continue;
+        }
+
+        fx cx = worldXForColumn(star.col, scrollX) + fi(kCellSize / 2);
+        fx cy = worldYForRow(star.row) + fi(kCellSize / 2);
+
+        if (star.offset == OffsetMod::ShiftRight ||
+            star.offset == OffsetMod::ShiftDownRight) {
+            cx = cx + fi(kCellSize / 2);
+        }
+        if (star.offset == OffsetMod::ShiftDown ||
+            star.offset == OffsetMod::ShiftDownRight) {
+            cy = cy - fi(kCellSize / 2);
+        }
+
+        const uint32_t phaseMs =
+            (game.animTimeMs() + uint32_t(star.index) * (kStarSpinPeriodMs / 3)) % kStarSpinPeriodMs;
+        const fx turns = fx::fromRatio(int(phaseMs), int(kStarSpinPeriodMs));
+
+        addStar(
+            rl,
+            cam,
+            Vec3fx{ cx, cy, fi(kCellSize / 2) },
+            turns,
+            color
+        );
     }
 }
 
@@ -503,6 +561,71 @@ void SceneBuilder::addAnimatedPrimitive(RenderList& rl,
     );
 }
 
+void SceneBuilder::addStar(RenderList& rl,
+                           const Camera& cam,
+                           const Vec3fx& center,
+                           fx turns,
+                           uint16_t color) const {
+    // 5-point star, billboarded in XY.
+    // Vertical-axis spin is approximated by scaling X by cos(turns).
+    fx c = fx::one();
+    fx s = fx::zero();
+    turnsToSinCos(turns, c, s);
+
+    const fx xScale = abs(c);
+
+    // Avoid collapsing to a perfectly invisible line.
+    const fx minScale = fx::fromRatio(1, 5);
+    const fx sx = (xScale < minScale) ? minScale : xScale;
+
+    // 80% cell diameter -> radius 40% of cell.
+    const fx outerR = fx::fromRatio(kCellSize * 4, 10);
+    const fx innerR = fx::fromRatio(kCellSize * 16, 100); // ~0.4 of outer radius
+
+    // Outer vertices, starting at top, then every 72 degrees clockwise.
+    // Using integer-milli constants keeps it cheap and deterministic.
+    static constexpr int kOuterMilli[5][2] = {
+        {    0, -1000 },
+        {  951,  -309 },
+        {  588,   809 },
+        { -588,   809 },
+        { -951,  -309 },
+    };
+
+    static constexpr int kInnerMilli[5][2] = {
+        {    0,  -382 },
+        {  363,  -118 },
+        {  224,   309 },
+        { -224,   309 },
+        { -363,  -118 },
+    };
+
+    Vec3fx outer[5]{};
+    Vec3fx inner[5]{};
+
+    for (int i = 0; i < 5; ++i) {
+        outer[i] = makeVec3(
+            gv::mulInt(outerR, kOuterMilli[i][0]) * sx / fx::fromInt(1000),
+            gv::mulInt(outerR, kOuterMilli[i][1]) / fx::fromInt(1000),
+            fx::zero()
+        );
+
+        inner[i] = makeVec3(
+            gv::mulInt(innerR, kInnerMilli[i][0]) * sx / fx::fromInt(1000),
+            gv::mulInt(innerR, kInnerMilli[i][1]) / fx::fromInt(1000),
+            fx::zero()
+        );
+    }
+
+    // Draw the classic 5 pentagram lines between outer vertices:
+    // 0->2->4->1->3->0
+    line3(add3(center, outer[0]), add3(center, outer[2]), color, cam, rl);
+    line3(add3(center, outer[2]), add3(center, outer[4]), color, cam, rl);
+    line3(add3(center, outer[4]), add3(center, outer[1]), color, cam, rl);
+    line3(add3(center, outer[1]), add3(center, outer[3]), color, cam, rl);
+    line3(add3(center, outer[3]), add3(center, outer[0]), color, cam, rl);
+}
+
 void SceneBuilder::addText(RenderList& rl, const Text& text, int16_t x, int16_t y,
                            uint16_t color, uint8_t alpha, bool inverted,
                            uint16_t bgColor565, uint8_t styleFlags) const {
@@ -574,6 +697,7 @@ void SceneBuilder::buildScene(RenderList& rl,
     const uint16_t kShip   = 0xFFFF;
     const uint16_t kCyan   = 0x07FF;
     const uint16_t kPurple = 0xF81F;
+    const uint16_t kStar   = 0xFFE0;
 
     if (!game.hasLevel()) return;
 
@@ -603,6 +727,8 @@ void SceneBuilder::buildScene(RenderList& rl,
     rectWireXZ(rl, cam, xLeft, xRight, yTop, z0, z1, kWire);
     rectWireXZ(rl, cam, xLeft, xRight, yBot, z0, z1, kWire);
 
+    drawLevelStars(rl, cam, game, scrollX, kStar);
+
     Column56 col{};
     for (int cx = col0; cx < col1; ++cx) {
         if (!game.readLevelColumn((uint16_t)cx, col))
@@ -628,18 +754,18 @@ void SceneBuilder::buildScene(RenderList& rl,
                     continue;
                 }
 
-                const AnimGroupOffsetMod gm = col.groupMod(row);
+                const OffsetMod gm = col.offsetMod(row);
 
                 fx anchorX = cellCenterX;
                 fx anchorY = cellCenterY;
 
                 const fx halfCell = fi(kCellSize / 2);
 
-                if (gm == AnimGroupOffsetMod::ShiftRight) {
+                if (gm == OffsetMod::ShiftRight) {
                     anchorX = anchorX + halfCell;
-                } else if (gm == AnimGroupOffsetMod::ShiftDown) {
+                } else if (gm == OffsetMod::ShiftDown) {
                     anchorY = anchorY - halfCell;
-                } else if (gm == AnimGroupOffsetMod::ShiftDownRight) {
+                } else if (gm == OffsetMod::ShiftDownRight) {
                     anchorX = anchorX + halfCell;
                     anchorY = anchorY - halfCell;
                 }

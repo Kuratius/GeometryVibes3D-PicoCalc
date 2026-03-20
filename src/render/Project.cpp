@@ -9,13 +9,9 @@ namespace gv {
 
 // Set to 1 to use the fast approximate normalization path.
 // Set to 0 to use the original divide-by-length normalization.
-#ifndef GV_FAST_NORMALIZE
 #define GV_FAST_NORMALIZE 1
-#endif
 
 // ---- small fixed helpers (local) ----
-static inline int64_t iabs64(int64_t x) { return x < 0 ? -x : x; }
-
 static inline Vec3fx sub3(const Vec3fx& a, const Vec3fx& b) {
     return Vec3fx{ a.x - b.x, a.y - b.y, a.z - b.z };
 }
@@ -35,10 +31,9 @@ static uint32_t sqrt_core(uint32_t xyy, uint32_t y) {
         }
     }
     //you can probably get 10-20% more speed out of this with inline assembler
-    //or an unroll
     //but thumb assembly is torture compared to arm
-#ifdef __GNUC__
-#pragma GCC unroll 8
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC unroll 6
 #endif
     for (uint32_t i = 2; i < 8; i += 1) {
         uint32_t t = xyy + (xyy >> i);
@@ -106,7 +101,6 @@ static void normalize_32(int32_t* a) {
 
         a[i] = sprod;
     }
-    return;
 }
 
 static inline Vec3fx normalize3(const Vec3fx& v) {
@@ -121,6 +115,8 @@ static inline Vec3fx normalize3(const Vec3fx& v) {
 }
 
 #else
+
+static inline int64_t iabs64(int64_t x) { return x < 0 ? -x : x; }
 
 // Integer sqrt for uint64 (floor)
 static inline uint32_t isqrt_u64(uint64_t x) {

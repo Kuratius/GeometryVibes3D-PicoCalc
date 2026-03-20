@@ -99,6 +99,12 @@ private:
                               fx groupSin,
                               uint16_t color) const;
 
+    void addStar(RenderList& rl,
+                 const Camera& cam,
+                 const Vec3fx& center,
+                 fx turns,
+                 uint16_t color) const;
+
     void addText(RenderList& rl, const Text& text, int16_t x, int16_t y,
                  uint16_t color, uint8_t alpha = 255, bool inverted = false,
                  uint16_t bgColor565 = 0x0000,
@@ -109,6 +115,12 @@ private:
 
     void drawPortalRays(RenderList& rl, const Camera& cam, const Game& game,
                         fx scrollX, const PortalRayState& portalRays,
+                        uint16_t color) const;
+
+    void drawLevelStars(RenderList& rl,
+                        const Camera& cam,
+                        const Game& game,
+                        fx scrollX,
                         uint16_t color) const;
 
     void trailPushLevelPoint(TrailState& trail, const Camera& cam,

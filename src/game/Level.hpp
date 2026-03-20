@@ -18,7 +18,7 @@ enum class ObstacleId : uint8_t {
     RightTri   = 2,
     HalfSpike  = 3,
     FullSpike  = 4,
-    Star       = 5, // future use: 5-point star shape, rotating
+    Star       = 5, // collectible 5-point star
     // 6..7 reserved
     AnimGroup1 = 8,
     AnimGroup2 = 9,
@@ -30,7 +30,7 @@ enum class ObstacleId : uint8_t {
     AnimGroup8 = 15,
 };
 
-enum class AnimGroupOffsetMod : uint8_t {
+enum class OffsetMod : uint8_t {
     None            = 0,
     ShiftRight      = 1, // shift anchor right by 1/2 cell
     ShiftDown       = 2, // shift anchor down by 1/2 cell
@@ -98,8 +98,8 @@ struct Column56 {
         return ShapeMod((cell6(y) >> 4) & 0x03);
     }
 
-    AnimGroupOffsetMod groupMod(int y) const {
-        return AnimGroupOffsetMod((cell6(y) >> 4) & 0x03);
+    OffsetMod offsetMod(int y) const {
+        return OffsetMod((cell6(y) >> 4) & 0x03);
     }
 };
 
@@ -116,7 +116,7 @@ struct Column56 {
 //
 // The source cell containing AnimGroupN is the placement anchor.
 // The anchor point is the CENTER of that source cell, optionally nudged
-// by AnimGroupOffsetMod in half-cell increments.
+// by OffsetMod in half-cell increments.
 // Group-local member coordinates and pivot coordinates are expressed in
 // half-cell units relative to that anchor point.
 // -----------------------------

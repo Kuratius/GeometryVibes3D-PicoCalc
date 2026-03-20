@@ -66,6 +66,16 @@ void PlayingState::update(App& app, const InputState& in, uint32_t dtUs) {
     const fx dt = fx::fromMicros(dtUs);
     game.update(in, dt);
 
+    const uint8_t newStars = game.newlyCollectedStarsMask();
+    if (newStars != 0) {
+        for (uint8_t i = 0; i < 3; ++i) {
+            if (((newStars >> i) & 1u) != 0) {
+                (void)app.collectStar(app.selectedLevel(), i);
+            }
+        }
+        game.clearNewlyCollectedStars();
+    }
+
     if (prevState != RunState::Dead && game.state() == RunState::Dead) {
         app.saveCurrentProgress();
 

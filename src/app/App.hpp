@@ -51,6 +51,7 @@ public:
     bool isLevelUnlocked(std::size_t i) const;
     const char* levelName(std::size_t i) const;
     const char* levelPath(std::size_t i) const;
+    int levelPercentComplete(std::size_t levelIndex) const;
 
     std::size_t selectedLevel() const { return selectedLevel_; }
     void setSelectedLevel(std::size_t i) {
@@ -84,7 +85,9 @@ public:
     bool saveCurrentProgress();
     bool saveLevelCompletion(std::size_t levelIndex);
 
-    
+    uint8_t collectedStarsForLevel(std::size_t levelIndex) const;
+    bool collectStar(std::size_t levelIndex, uint8_t starIndex);
+
     void changeState(IAppState& next);
     void showTitle();
     void showHomeMenu();

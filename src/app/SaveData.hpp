@@ -49,6 +49,10 @@ public:
     bool setLevelPercent(std::size_t index, std::size_t levelIndex, uint8_t percent);
     bool setLevelStars(std::size_t index, std::size_t levelIndex, uint8_t stars);
 
+    uint8_t levelStars(std::size_t index, std::size_t levelIndex) const;
+    bool hasLevelStar(std::size_t index, std::size_t levelIndex, uint8_t starBit) const;
+    bool collectLevelStar(std::size_t index, std::size_t levelIndex, uint8_t starBit);;
+
     static void sanitizeEntry(SaveEntry& e);
     static void normalizeName(char (&dst)[kNameBytes], const char* src);
 

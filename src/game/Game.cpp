@@ -20,17 +20,16 @@ static inline gv::fx q7ScaleToFx(uint8_t q7) {
     return gv::fx::fromRatio(int(q7), 128);
 }
 
-static inline void applyGroupOffsetToAnchor(gv::AnimGroupOffsetMod gm, gv::fx& anchorX, gv::fx& anchorY) {
+static inline void applyGroupOffsetToAnchor(gv::OffsetMod gm, gv::fx& anchorX, gv::fx& anchorY) {
     const gv::fx half = halfCellFx();
 
-    if (gm == gv::AnimGroupOffsetMod::ShiftRight ||
-        gm == gv::AnimGroupOffsetMod::ShiftDownRight) {
+    if (gm == gv::OffsetMod::ShiftRight ||
+        gm == gv::OffsetMod::ShiftDownRight) {
         anchorX = anchorX + half;
     }
 
-    // World Y is positive upward, so "down" is negative Y.
-    if (gm == gv::AnimGroupOffsetMod::ShiftDown ||
-        gm == gv::AnimGroupOffsetMod::ShiftDownRight) {
+    if (gm == gv::OffsetMod::ShiftDown ||
+        gm == gv::OffsetMod::ShiftDownRight) {
         anchorY = anchorY - half;
     }
 }
@@ -43,16 +42,12 @@ static inline void turnsToSinCos(gv::fx turns, gv::fx& c, gv::fx& s) {
     s = gv::fx::fromRaw(int32_t(std::lround(std::sin(a) * double(1 << gv::fx::SHIFT))));
 }
 
-// Inverse of the forward XY rotation used by SceneBuilder.
 static inline void inverseRotatePointAround(gv::fx& x, gv::fx& y,
                                             gv::fx ox, gv::fx oy,
                                             gv::fx c, gv::fx s) {
     const gv::fx dx = x - ox;
     const gv::fx dy = y - oy;
 
-    // Inverse rotation by angle A:
-    // [ c  s]
-    // [-s  c]
     const gv::fx ndx = dx * c + dy * s;
     const gv::fx ndy = -dx * s + dy * c;
 
@@ -68,9 +63,6 @@ static inline void inverseScalePointAround(gv::fx& x, gv::fx& y,
     y = oy + (y - oy) / scale;
 }
 
-// Conservative per-def search radius in half-cell units.
-// We bound each primitive by its 1x1 cell box around its center,
-// so corners are (hx±1, hy±1) in half-cell coordinates.
 static inline int computeAnimSearchPadCells(const gv::Game& game) {
     int maxRadiusHalfCells = 0;
 
@@ -100,13 +92,8 @@ static inline int computeAnimSearchPadCells(const gv::Game& game) {
         }
     }
 
-    // half-cells -> cells, with a bit of extra slack
     return (maxRadiusHalfCells + 1) / 2 + 1;
 }
-
-// -----------------------------
-// 2D narrow-phase helpers
-// -----------------------------
 
 struct Pt2fx {
     gv::fx x{};
@@ -183,7 +170,6 @@ static inline bool pointInConvexPoly(const Pt2fx& p, const Poly2fx& poly) {
 }
 
 static inline bool convexPolysOverlap(const Poly2fx& a, const Poly2fx& b) {
-    // Edge-edge intersections
     for (int i = 0; i < a.count; ++i) {
         const Pt2fx& a0 = a.v[i];
         const Pt2fx& a1 = a.v[(i + 1) % a.count];
@@ -198,7 +184,6 @@ static inline bool convexPolysOverlap(const Poly2fx& a, const Poly2fx& b) {
         }
     }
 
-    // Full containment either way
     if (pointInConvexPoly(a.v[0], b)) return true;
     if (pointInConvexPoly(b.v[0], a)) return true;
 
@@ -292,14 +277,13 @@ static inline void buildPrimitivePoly2D(gv::ObstacleId sid, gv::ShapeMod mod, Po
 
 static inline void buildShipPoly2D(gv::fx shipCenterX, gv::fx shipCenterY, gv::fx shipVy, Poly2fx& poly) {
     using gv::fx;
-    
-    const fx pad = fx::fromRatio(3, 2); // Small padding to give a little breathing room for collision; adjust to improve feel. 
+
+    const fx pad = fx::fromRatio(3, 2);
     const fx halfW = fx::fromInt(gv::kCellSize / 4) - pad;
     const fx halfLen   = fx::fromInt(gv::kCellSize) * fx::fromRatio(9, 20) - pad;
 
     poly.count = 3;
 
-    // Canonical ship triangle in XY, matching SceneBuilder::addShip().
     poly.v[0] = { shipCenterX + halfLen, shipCenterY };
     poly.v[1] = { shipCenterX - halfLen, shipCenterY + halfW };
     poly.v[2] = { shipCenterX - halfLen, shipCenterY - halfW };
@@ -380,6 +364,50 @@ void Game::clearAnimDefs() {
     for (auto& s : animGroupScale_) {
         s = fx::one();
     }
+}
+
+void Game::clearStars() {
+    levelStars_.clear();
+    collectedStarsMask_ = 0;
+    newlyCollectedStarsMask_ = 0;
+}
+
+void Game::applyOffsetToAnchor(OffsetMod om, fx& anchorX, fx& anchorY) {
+    ::applyGroupOffsetToAnchor(om, anchorX, anchorY);
+}
+
+bool Game::loadStarsFromLevel() {
+    clearStars();
+    if (!hasLevel()) return false;
+
+    Column56 col{};
+    for (uint16_t c = 0; c < levelHdr.width; ++c) {
+        if (!readLevelColumn(c, col)) {
+            return false;
+        }
+
+        for (int row = 0; row < kLevelHeight; ++row) {
+            if (col.obstacle(row) != ObstacleId::Star) {
+                continue;
+            }
+
+            if (levelStars_.size() >= kMaxLevelStars) {
+                continue;
+            }
+
+            LevelStar star{};
+            star.col = c;
+            star.row = uint8_t(row);
+            star.offset = col.offsetMod(row);
+            star.index = uint8_t(levelStars_.size());
+
+            if (!levelStars_.push_back(star)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 void Game::updateAnimCache() {
@@ -592,6 +620,11 @@ bool Game::loadLevel(const char* path) {
         return false;
     }
 
+    if (!loadStarsFromLevel()) {
+        unloadLevel();
+        return false;
+    }
+
     finished_ = false;
     hit = false;
     shipState.vy = fx::zero();
@@ -622,6 +655,7 @@ void Game::unloadLevel() {
     }
     std::memset(&levelHdr, 0, sizeof(levelHdr));
     clearAnimDefs();
+    clearStars();
 
     if (collisionHighlightEnabled_) {
         collisionDebugPrimitives_.clear();
@@ -638,6 +672,53 @@ bool Game::readLevelColumn(uint16_t i, Column56& out) const {
     size_t got = 0;
     if (!file_->read(out.b, kColumnBytes, got)) return false;
     return got == kColumnBytes;
+}
+
+void Game::checkStarPickup() {
+    if (runState == RunState::Dead) return;
+    if (!hasLevel()) return;
+    if (levelStars_.empty()) return;
+
+    const fx shipX = fx::fromInt(kShipFixedX);
+    const fx shipY = shipState.y;
+    const fx shipHalfW = fx::fromInt(kCellSize / 4);
+    const fx shipHalfH = fx::fromInt(kCellSize / 4);
+
+    static constexpr uint32_t kStarSpinPeriodMs = 2400;
+
+    for (const auto& star : levelStars_) {
+        if (starCollected(star.index)) {
+            continue;
+        }
+
+        fx centerX = worldXForColumn(star.col, xScroll) + halfCellFx();
+        fx centerY = worldYForRow(star.row) + halfCellFx();
+        applyOffsetToAnchor(star.offset, centerX, centerY);
+
+        const uint32_t phaseMs =
+            (animTimeMs_ + uint32_t(star.index) * (kStarSpinPeriodMs / 3)) % kStarSpinPeriodMs;
+        const fx turns = fx::fromRatio(int(phaseMs), int(kStarSpinPeriodMs));
+
+        fx c = fx::one();
+        fx s = fx::zero();
+        turnsToSinCos(turns, c, s);
+
+        const fx halfH = fx::fromRatio(kCellSize * 4, 10);
+        fx halfW = halfH * abs(c);
+        if (halfW < fx::fromRatio(1, 4)) {
+            halfW = fx::fromRatio(1, 4);
+        }
+
+        const fx dx = abs(shipX - centerX);
+        const fx dy = abs(shipY - centerY);
+
+        if (dx <= (shipHalfW + halfW) && dy <= (shipHalfH + halfH)) {
+            const uint8_t bit = uint8_t(1u << star.index);
+            collectedStarsMask_ = uint8_t(collectedStarsMask_ | bit);
+            newlyCollectedStarsMask_ = uint8_t(newlyCollectedStarsMask_ | bit);
+            hud_.setEventMessage("Star collected!", false);
+        }
+    }
 }
 
 void Game::update(const InputState& in, fx dt) {
@@ -673,6 +754,8 @@ void Game::update(const InputState& in, fx dt) {
         animTimeMs_ += dtMs;
         updateAnimCache();
 
+        checkStarPickup();
+
         if (flyOutX >= kFlyOutCells) {
             finished_ = true;
         }
@@ -692,6 +775,8 @@ void Game::update(const InputState& in, fx dt) {
     const uint32_t dtMs = uint32_t(gv::mulInt(dt, 1000).roundToInt());
     animTimeMs_ += dtMs;
     updateAnimCache();
+
+    checkStarPickup();
 
     if (checkPortalReached(shipState.y)) {
         runState = RunState::FinishedFlyOut;
@@ -740,7 +825,6 @@ bool Game::checkCollisionAt(fx shipY) const {
         collisionDebugPrimitives_.clear();
     }
 
-    // ---- Static obstacle neighborhood ----
     const fx x0 = xScroll - r;
     const fx x1 = xScroll + r;
 
@@ -765,7 +849,6 @@ bool Game::checkCollisionAt(fx shipY) const {
         staticRowB = t;
     }
 
-    // ---- Animated group neighborhood ----
     const int animPadCells = computeAnimSearchPadCells(*this);
 
     int animCol0 = staticColA - animPadCells;
@@ -788,9 +871,8 @@ bool Game::checkCollisionAt(fx shipY) const {
 
         for (int row = 0; row < kLevelHeight; ++row) {
             const ObstacleId sid = col.obstacle(row);
-            if (sid == ObstacleId::Empty) continue;
+            if (sid == ObstacleId::Empty || sid == ObstacleId::Star) continue;
 
-            // ---- Animated groups ----
             if (is_anim_group(sid)) {
                 if (row < animRow0 || row > animRow1) {
                     continue;
@@ -802,7 +884,7 @@ bool Game::checkCollisionAt(fx shipY) const {
                 }
 
                 const LoadedAnimGroupDef& def = animGroupDefs_[defIndex];
-                const AnimGroupOffsetMod gm = col.groupMod(row);
+                const OffsetMod gm = col.offsetMod(row);
 
                 fx anchorX = cellCenterX;
                 fx anchorY = worldYForRow(row) + halfCellFx();
@@ -818,7 +900,6 @@ bool Game::checkCollisionAt(fx shipY) const {
                 const fx groupPivotX = anchorX + mulInt(halfCellFx(), int(def.hdr.pivotHx));
                 const fx groupPivotY = anchorY - mulInt(halfCellFx(), int(def.hdr.pivotHy));
 
-                // Move ship center into the group's unrotated and unscaled space.
                 fx sxLocal = sx;
                 fx syLocal = sy;
                 inverseRotatePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, gc, gs);
@@ -826,6 +907,10 @@ bool Game::checkCollisionAt(fx shipY) const {
 
                 for (uint8_t i = 0; i < def.hdr.primitiveCount; ++i) {
                     const AnimPrimitiveDef& p = animPrimitives_[def.firstPrimitive + i];
+
+                    if (p.obstacle == ObstacleId::Star) {
+                        continue;
+                    }
 
                     const fx primCenterX = anchorX + mulInt(halfCellFx(), int(p.hx));
                     const fx primCenterY = anchorY - mulInt(halfCellFx(), int(p.hy));
@@ -864,7 +949,6 @@ bool Game::checkCollisionAt(fx shipY) const {
                 continue;
             }
 
-            // ---- Static primitives ----
             if (c < staticColA || c > staticColB) {
                 continue;
             }

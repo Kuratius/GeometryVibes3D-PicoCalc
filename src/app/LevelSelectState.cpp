@@ -22,37 +22,32 @@ void LevelSelectState::rebuildTexts(App& app) {
         levelCount_ = kLevelTextCap;
     }
 
-    const SaveData::SaveEntry* save = app.activeSave();
-
     for (std::size_t i = 0; i < levelCount_; ++i) {
-        char buf[64]{};
+        char buf[48];
 
         if (app.isLevelUnlocked(i)) {
-            unsigned percent = 0;
-            unsigned stars = 0;
+            const int pct = app.levelPercentComplete(i);
+            const uint8_t stars = app.collectedStarsForLevel(i);
 
-            if (save && i < SaveData::kLevelCount) {
-                percent = save->percentComplete[i];
-                if (percent > 100) percent = 100;
+            const char s0 = ((stars & 0x01u) != 0) ? '\x7F' : '_';
+            const char s1 = ((stars & 0x02u) != 0) ? '\x7F' : '_';
+            const char s2 = ((stars & 0x04u) != 0) ? '\x7F' : '_';
 
-                stars = save->stars[i];
-                if (stars > 3) stars = 3;
-            }
-
-            std::snprintf(buf, sizeof(buf), "%s %3u%%", app.levelName(i), percent);
-
-            std::size_t len = 0;
-            while (buf[len] != '\0' && len + 1 < sizeof(buf)) {
-                ++len;
-            }
-
-            for (unsigned s = 0; s < stars && len + 1 < sizeof(buf) - 1; ++s) {
-                buf[len++] = ' ';
-                buf[len++] = char(127);
-            }
-            buf[len] = '\0';
+            std::snprintf(
+                buf,
+                sizeof(buf),
+                "%s %3d%% %c%c%c",
+                app.levelName(i),
+                pct,
+                s0, s1, s2
+            );
         } else {
-            std::snprintf(buf, sizeof(buf), "%s [Locked]", app.levelName(i));
+            std::snprintf(
+                buf,
+                sizeof(buf),
+                "%s [Locked]",
+                app.levelName(i)
+            );
         }
 
         levelTexts_[i].setText(buf);
@@ -60,13 +55,6 @@ void LevelSelectState::rebuildTexts(App& app) {
 
     if (selectedLevel_ >= levelCount_) {
         selectedLevel_ = (levelCount_ > 0) ? (levelCount_ - 1) : 0;
-    }
-
-    if (!app.isLevelUnlocked(selectedLevel_)) {
-        selectedLevel_ = 0;
-        while ((selectedLevel_ + 1) < levelCount_ && !app.isLevelUnlocked(selectedLevel_)) {
-            ++selectedLevel_;
-        }
     }
 }
 
@@ -97,7 +85,7 @@ void LevelSelectState::buildMenu(App& app, RenderList& rl) const {
             selected
         );
     }
-    
+
     rl.addText(&help_, 16, 180, kGray);
 }
 

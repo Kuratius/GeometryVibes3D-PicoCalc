@@ -218,6 +218,36 @@ bool App::saveLevelCompletion(std::size_t levelIndex) {
     return saveSaves();
 }
 
+uint8_t App::collectedStarsForLevel(std::size_t levelIndex) const {
+    if (!hasActiveSave()) return 0;
+    if (levelIndex >= kLevelCount) return 0;
+
+    const SaveData::SaveEntry* e = saveData_.entry(activeSaveIndex_);
+    if (!e) return 0;
+
+    return uint8_t(e->stars[levelIndex] & 0x07u);
+}
+
+bool App::collectStar(std::size_t levelIndex, uint8_t starIndex) {
+    if (!hasActiveSave()) return false;
+    if (levelIndex >= kLevelCount) return false;
+    if (starIndex >= 3) return false;
+
+    SaveData::SaveEntry* e = saveData_.entry(activeSaveIndex_);
+    if (!e) return false;
+
+    const uint8_t bit = uint8_t(1u << starIndex);
+    const uint8_t oldMask = uint8_t(e->stars[levelIndex] & 0x07u);
+    const uint8_t newMask = uint8_t(oldMask | bit);
+
+    if (newMask == oldMask) {
+        return true;
+    }
+
+    e->stars[levelIndex] = newMask;
+    return saveSaves();
+}
+
 std::size_t App::unlockedLevelCount() const {
 #ifdef GV3D_TESTING
     return kLevelCount;
@@ -243,6 +273,16 @@ const char *App::levelName(std::size_t i) const
 const char* App::levelPath(std::size_t i) const {
     if (i >= kLevelCount) return "";
     return kLevels[i].path;
+}
+
+int App::levelPercentComplete(std::size_t levelIndex) const {
+    if (!hasActiveSave()) return 0;
+    if (levelIndex >= kLevelCount) return 0;
+
+    const SaveData::SaveEntry* e = saveData_.entry(activeSaveIndex_);
+    if (!e) return 0;
+
+    return int(e->percentComplete[levelIndex]);
 }
 
 void App::changeState(IAppState& next) {
@@ -296,6 +336,8 @@ bool App::startLevel(std::size_t levelIndex) {
 
     game_.reset();
     game_.setFileSystem(&plat_->fs());
+    game_.setLevelIndex(levelIndex);
+    game_.setCollectedStarsMask(collectedStarsForLevel(levelIndex));
 
     const LevelEntry& e = kLevels[levelIndex];
     if (!game_.loadLevel(e.path)) {

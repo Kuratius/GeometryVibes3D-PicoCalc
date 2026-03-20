@@ -264,4 +264,31 @@ bool SaveData::setLevelStars(std::size_t index, std::size_t levelIndex, uint8_t 
     return true;
 }
 
+uint8_t SaveData::levelStars(std::size_t index, std::size_t levelIndex) const {
+    const SaveEntry* e = entry(index);
+    if (!e || levelIndex >= kLevelCount) {
+        return 0;
+    }
+    return e->stars[levelIndex];
+}
+
+bool SaveData::hasLevelStar(std::size_t index, std::size_t levelIndex, uint8_t starBit) const {
+    if (starBit >= 3) {
+        return false;
+    }
+
+    const uint8_t mask = levelStars(index, levelIndex);
+    return ((mask >> starBit) & 1u) != 0;
+}
+
+bool SaveData::collectLevelStar(std::size_t index, std::size_t levelIndex, uint8_t starBit) {
+    SaveEntry* e = entry(index);
+    if (!e || levelIndex >= kLevelCount || starBit >= 3) {
+        return false;
+    }
+
+    e->stars[levelIndex] = uint8_t(e->stars[levelIndex] | uint8_t(1u << starBit));
+    return true;
+}
+
 } // namespace gv

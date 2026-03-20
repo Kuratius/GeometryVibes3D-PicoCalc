@@ -2,7 +2,7 @@
   "width": 274,
   "height": 9,
   "backgroundColor565": 0,
-  "obstacleColor565": 2016,
+  "obstacleColor565": 59420,
   "cells": [
     {
       "x": 16,
@@ -864,25 +864,10 @@
       "mod": "invert"
     },
     {
-      "x": 220,
-      "y": 0,
-      "type": "primitive",
-      "shape": "half_spike",
-      "mod": "invert"
-    },
-    {
       "x": 221,
       "y": 0,
       "type": "primitive",
-      "shape": "half_spike",
-      "mod": "invert"
-    },
-    {
-      "x": 222,
-      "y": 0,
-      "type": "primitive",
-      "shape": "half_spike",
-      "mod": "invert"
+      "shape": "star"
     },
     {
       "x": 223,
@@ -1479,6 +1464,13 @@
       "type": "anim_ref",
       "groupIndex": 1,
       "offsetMod": "none"
+    },
+    {
+      "x": 141,
+      "y": 1,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_down_right"
     },
     {
       "x": 154,
@@ -2954,6 +2946,13 @@
       "type": "primitive",
       "shape": "half_spike",
       "mod": "invert"
+    },
+    {
+      "x": 94,
+      "y": 7,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_down_right"
     },
     {
       "x": 98,
@@ -5077,25 +5076,10 @@
       "mod": "invert"
     },
     {
-      "x": 220,
-      "y": 0,
-      "type": "primitive",
-      "shape": "half_spike",
-      "mod": "invert"
-    },
-    {
       "x": 221,
       "y": 0,
       "type": "primitive",
-      "shape": "half_spike",
-      "mod": "invert"
-    },
-    {
-      "x": 222,
-      "y": 0,
-      "type": "primitive",
-      "shape": "half_spike",
-      "mod": "invert"
+      "shape": "star"
     },
     {
       "x": 223,
@@ -5723,6 +5707,13 @@
       "type": "anim_ref",
       "groupIndex": 1,
       "offsetMod": "none"
+    },
+    {
+      "x": 141,
+      "y": 1,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_down_right"
     },
     {
       "x": 154,
@@ -7310,6 +7301,13 @@
       "type": "primitive",
       "shape": "half_spike",
       "mod": "invert"
+    },
+    {
+      "x": 94,
+      "y": 7,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_down_right"
     },
     {
       "x": 98,

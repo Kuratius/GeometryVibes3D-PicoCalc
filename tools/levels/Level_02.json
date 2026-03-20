@@ -293,8 +293,7 @@
       "x": 128,
       "y": 0,
       "type": "primitive",
-      "shape": "half_spike",
-      "mod": "invert"
+      "shape": "star"
     },
     {
       "x": 131,
@@ -2156,6 +2155,12 @@
       "type": "primitive",
       "shape": "right_tri",
       "mod": "rot_right"
+    },
+    {
+      "x": 79,
+      "y": 4,
+      "type": "primitive",
+      "shape": "star"
     },
     {
       "x": 81,
@@ -4440,6 +4445,13 @@
       "mod": "rot_right"
     },
     {
+      "x": 272,
+      "y": 7,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_right"
+    },
+    {
       "x": 276,
       "y": 7,
       "type": "primitive",
@@ -6220,8 +6232,7 @@
       "x": 128,
       "y": 0,
       "type": "primitive",
-      "shape": "half_spike",
-      "mod": "invert"
+      "shape": "star"
     },
     {
       "x": 131,
@@ -8178,6 +8189,12 @@
       "mod": "rot_right"
     },
     {
+      "x": 79,
+      "y": 4,
+      "type": "primitive",
+      "shape": "star"
+    },
+    {
       "x": 81,
       "y": 4,
       "type": "primitive",
@@ -10508,6 +10525,13 @@
       "type": "primitive",
       "shape": "full_spike",
       "mod": "rot_right"
+    },
+    {
+      "x": 272,
+      "y": 7,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_right"
     },
     {
       "x": 276,

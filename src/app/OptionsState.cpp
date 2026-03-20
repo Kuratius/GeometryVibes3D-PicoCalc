@@ -11,10 +11,6 @@ void OptionsState::onEnter(App& app) {
     rebuildTexts(app);
 }
 
-void OptionsState::onExit(App& app) {
-    (void)app;
-}
-
 void OptionsState::rebuildTexts(App& app) {
     char buf[48]{};
 

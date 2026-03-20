@@ -1,5 +1,6 @@
 #pragma once
-#include "game/InputState.hpp"
+
+#include <cstdint>
 
 namespace gv {
 
@@ -7,7 +8,6 @@ class IInput {
 public:
     virtual ~IInput() = default;
     virtual void init() = 0;
-
     virtual void update() = 0;
 
     virtual bool down(uint8_t key) const = 0;

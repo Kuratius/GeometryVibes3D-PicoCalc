@@ -1,6 +1,5 @@
 #include "SavedGamesState.hpp"
 #include "App.hpp"
-#include "platform/Keys.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
 
@@ -13,17 +12,12 @@ void SavedGamesState::onEnter(App& app) {
     clampSelection(app);
 }
 
-void SavedGamesState::onExit(App& app) {
-    (void)app;
-}
-
 void SavedGamesState::rebuildTexts(App& app) {
     count_ = app.saveData().entryCount();
     if (count_ > kTextCap) count_ = kTextCap;
 
     for (std::size_t i = 0; i < count_; ++i) {
-        const SaveData::SaveEntry* e = app.saveData().entry(i);
-        saveTexts_[i].setText(e ? e->name : "");
+        saveTexts_[i].setText(app.saveData().entryName(i));
     }
 }
 
@@ -73,7 +67,7 @@ void SavedGamesState::update(App& app, const InputState& in, uint32_t dtUs) {
         ++selected_;
     }
 
-    if (app.platform().input().pressed(KEY_DEL)) {
+    if (in.deletePressed) {
         confirmDelete_ = true;
         return;
     }

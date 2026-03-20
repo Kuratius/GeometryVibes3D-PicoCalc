@@ -2,7 +2,7 @@
 
 A faithful RP2040 port of **Geometry Vibes 3D**, targeting the **ClockworkPi PicoCalc**.
 
-Current state: playable wireframe “fake 3D” implementation with a state-driven app flow, persistent save data, animated obstacle groups with rotation and scaling, gameplay-plane collision against static and animated geometry, and stable fixed-rate rendering on the ILI9488.
+Current state: playable wireframe “fake 3D” implementation with a state-driven app flow, persistent save data, collectible level stars, animated obstacle groups with rotation and scaling, gameplay-plane collision against static and animated geometry, and stable fixed-rate rendering on the ILI9488.
 
 ## Features
 
@@ -24,24 +24,35 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
   - highlighted selection
   - locked/unlocked level progression
   - per-level completion percentage display
+  - per-level star progress display
   - `[Locked]` status for unavailable levels
+- **Collectible stars**
+  - each level contains **3 collectible stars**
+  - stars are placed directly in packed level cells
+  - per-save collection state is persisted
+  - collected stars do not respawn after save/load
+  - level completion is **not** required to keep collected stars
 - **HUD layer** with:
   - controls hint
   - level label
   - progress bar + percentage
   - fading event text
+  - collectible-star event notifications
 - **Ship controls** with 45° up/down travel like the original
 - **Collision detection** against:
   - static level geometry
   - rotation / inversion modifiers
   - animated obstacle groups
+  - collectible stars
 - **Gameplay-plane collision model**
   - 2D primitive overlap for static and animated obstacles
+  - rectangle-based collectible-star pickup checks
   - more accurate ship collision than the earlier sphere-style approximation
 - **Wireframe effects**, including:
   - animated portal rays
   - ship trail
   - ship explosion chunks
+  - rotating collectible stars
 - **Animated obstacle groups**
   - grouped primitive definitions stored in the level file
   - per-group pivot
@@ -79,6 +90,7 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
 - Cached screen-space text objects for HUD and menu rendering
 - Scene building and animated-group rendering are driven from level-streamed data
 - Animated group rendering supports rotation and uniform scaling around a shared pivot
+- Collectible stars are rendered as upright 5-point wireframe stars with a lightweight billboard-style spin
 - Overlay/footer rendering supports battery state, warnings, and menu/status text
 
 ## Save format
@@ -93,7 +105,7 @@ The current runtime stores save data in a compact binary file on the SD card:
   - save name
   - unlocked level count
   - per-level completion percentage
-  - reserved per-level stars data
+  - per-level collected stars bitmask
 
 Deleting a save compacts the entry list and immediately rewrites the file.
 
@@ -106,8 +118,9 @@ The current runtime uses the **GVL3** format:
 - packed 56-bit obstacle columns
 - support for:
   - primitive obstacles
+  - collectible stars
   - animation-group references
-  - half-cell animation-group anchor offsets
+  - half-cell anchor offsets
   - per-level background and obstacle colors
 
 Animated groups are authored as reusable definitions and then referenced from packed level cells.
@@ -123,10 +136,11 @@ Animation steps support:
 - **Level editor**: `tools/level_editor/level_editor.py`
   - Tkinter-based 9×N level editor
   - paint primitive obstacles and modifiers
+  - paint collectible stars (up to **3 per level**)
   - create named animated obstacle groups from selected primitives
   - edit group pivot and animation steps
   - edit per-level background and obstacle colors
-  - preview placed animated groups in-editor
+  - preview placed animation groups in-editor
   - live animation playback preview
   - locked auto-generated endcap + portal preview
   - rectangle select, copy, cut, paste, undo, and redo

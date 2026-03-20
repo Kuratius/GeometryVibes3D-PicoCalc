@@ -19,11 +19,11 @@ static uint8_t clampUnlockedCount(uint8_t v) {
 
 } // namespace
 
-const SaveData::SaveEntry* SaveData::entry(std::size_t i) const {
+const SaveData::SaveEntry* SaveData::entryAt(std::size_t i) const {
     return (i < entries_.size()) ? &entries_[i] : nullptr;
 }
 
-SaveData::SaveEntry* SaveData::entry(std::size_t i) {
+SaveData::SaveEntry* SaveData::entryAt(std::size_t i) {
     return (i < entries_.size()) ? &entries_[i] : nullptr;
 }
 
@@ -55,7 +55,7 @@ void SaveData::sanitizeEntry(SaveEntry& e) {
 
     for (std::size_t i = 0; i < kLevelCount; ++i) {
         e.percentComplete[i] = clampPercent(e.percentComplete[i]);
-        // stars are left as raw bytes for now
+        e.stars[i] = uint8_t(e.stars[i] & 0x07u);
     }
 }
 
@@ -224,8 +224,13 @@ void SaveData::clearLastPlayed() {
     lastPlayedIndex_ = kNoSelection;
 }
 
+const char* SaveData::entryName(std::size_t index) const {
+    const SaveEntry* e = entryAt(index);
+    return e ? e->name : "";
+}
+
 bool SaveData::renameEntry(std::size_t index, const char* name) {
-    SaveEntry* e = entry(index);
+    SaveEntry* e = entryAt(index);
     if (!e || !name || !*name) {
         return false;
     }
@@ -234,8 +239,13 @@ bool SaveData::renameEntry(std::size_t index, const char* name) {
     return e->name[0] != '\0';
 }
 
+uint8_t SaveData::unlockedCount(std::size_t index) const {
+    const SaveEntry* e = entryAt(index);
+    return e ? e->unlockedCount : 0;
+}
+
 bool SaveData::setUnlockedCount(std::size_t index, uint8_t unlockedCount) {
-    SaveEntry* e = entry(index);
+    SaveEntry* e = entryAt(index);
     if (!e) {
         return false;
     }
@@ -244,8 +254,16 @@ bool SaveData::setUnlockedCount(std::size_t index, uint8_t unlockedCount) {
     return true;
 }
 
+uint8_t SaveData::levelPercent(std::size_t index, std::size_t levelIndex) const {
+    const SaveEntry* e = entryAt(index);
+    if (!e || levelIndex >= kLevelCount) {
+        return 0;
+    }
+    return e->percentComplete[levelIndex];
+}
+
 bool SaveData::setLevelPercent(std::size_t index, std::size_t levelIndex, uint8_t percent) {
-    SaveEntry* e = entry(index);
+    SaveEntry* e = entryAt(index);
     if (!e || levelIndex >= kLevelCount) {
         return false;
     }
@@ -254,22 +272,22 @@ bool SaveData::setLevelPercent(std::size_t index, std::size_t levelIndex, uint8_
     return true;
 }
 
+uint8_t SaveData::levelStars(std::size_t index, std::size_t levelIndex) const {
+    const SaveEntry* e = entryAt(index);
+    if (!e || levelIndex >= kLevelCount) {
+        return 0;
+    }
+    return uint8_t(e->stars[levelIndex] & 0x07u);
+}
+
 bool SaveData::setLevelStars(std::size_t index, std::size_t levelIndex, uint8_t stars) {
-    SaveEntry* e = entry(index);
+    SaveEntry* e = entryAt(index);
     if (!e || levelIndex >= kLevelCount) {
         return false;
     }
 
-    e->stars[levelIndex] = stars;
+    e->stars[levelIndex] = uint8_t(stars & 0x07u);
     return true;
-}
-
-uint8_t SaveData::levelStars(std::size_t index, std::size_t levelIndex) const {
-    const SaveEntry* e = entry(index);
-    if (!e || levelIndex >= kLevelCount) {
-        return 0;
-    }
-    return e->stars[levelIndex];
 }
 
 bool SaveData::hasLevelStar(std::size_t index, std::size_t levelIndex, uint8_t starBit) const {
@@ -282,12 +300,12 @@ bool SaveData::hasLevelStar(std::size_t index, std::size_t levelIndex, uint8_t s
 }
 
 bool SaveData::collectLevelStar(std::size_t index, std::size_t levelIndex, uint8_t starBit) {
-    SaveEntry* e = entry(index);
+    SaveEntry* e = entryAt(index);
     if (!e || levelIndex >= kLevelCount || starBit >= 3) {
         return false;
     }
 
-    e->stars[levelIndex] = uint8_t(e->stars[levelIndex] | uint8_t(1u << starBit));
+    e->stars[levelIndex] = uint8_t((e->stars[levelIndex] | uint8_t(1u << starBit)) & 0x07u);
     return true;
 }
 

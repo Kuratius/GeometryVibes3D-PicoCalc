@@ -1,9 +1,16 @@
 ### Level Editor (Python)
 
-A Tkinter-based editor for GV3D levels with support for both static obstacles and animated obstacle groups.
+A Tkinter-based editor for GV3D levels with support for static obstacles, collectible stars, and animated obstacle groups.
 
 Features:
-- Place grid-aligned primitive obstacles (square, right triangle, half spike, full spike)
+- Place grid-aligned primitive obstacles:
+  - square
+  - right triangle
+  - half spike
+  - full spike
+- Place collectible stars in a dedicated paint mode
+- Star placement is capped at **3 per level**
+- The **Paint Stars** mode is disabled when the star cap has been reached
 - Apply primitive modifiers where supported
 - Horizontal scrolling playfield with vertically centered grid
 - Rectangle selection with Shift+drag
@@ -43,6 +50,7 @@ Features:
 Notes:
 - The editor stores full authoring data in JSON.
 - Binary export writes the packed level format used by the game.
+- Stars are stored directly in packed level cells using the runtime obstacle encoding.
 - The portal and endcap are generated automatically during export and shown in the editor as overlays.
 - Animation-group origins are derived from the weighted average of the selected primitive footprint, snapped to the half-cell grid.
 - Animation step scale is stored in the binary format as `targetScaleQ7`, where `128 = 1.0`.

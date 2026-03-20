@@ -1,48 +1,15 @@
 #include "NewGameState.hpp"
 #include "App.hpp"
-#include "platform/Keys.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
 
 namespace gv {
-
-namespace {
-
-static bool keyToChar(uint8_t key, char& out) {
-    if (key >= 'A' && key <= 'Z') {
-        out = static_cast<char>(key);
-        return true;
-    }
-    if (key >= 'a' && key <= 'z') {
-        out = static_cast<char>(key);
-        return true;
-    }
-    if (key >= '0' && key <= '9') {
-        out = static_cast<char>(key);
-        return true;
-    }
-    if (key == KEY_SPACE) {
-        out = ' ';
-        return true;
-    }
-    if (key == '-' || key == '_') {
-        out = static_cast<char>(key);
-        return true;
-    }
-    return false;
-}
-
-} // namespace
 
 void NewGameState::onEnter(App& app) {
     (void)app;
     len_ = 0;
     name_[0] = '\0';
     rebuildNameText();
-}
-
-void NewGameState::onExit(App& app) {
-    (void)app;
 }
 
 void NewGameState::rebuildNameText() {
@@ -76,19 +43,18 @@ void NewGameState::backspace() {
 
 void NewGameState::update(App& app, const InputState& in, uint32_t dtUs) {
     (void)dtUs;
-    (void)in;
 
-    if (app.platform().input().pressed(KEY_ESC)) {
+    if (in.back) {
         app.showHomeMenu();
         return;
     }
 
-    if (app.platform().input().pressed(KEY_BACKSPACE)) {
+    if (in.backspacePressed) {
         backspace();
         return;
     }
 
-    if (app.platform().input().pressed(KEY_ENTER) || app.platform().input().pressed(KEY_RETURN)) {
+    if (in.confirm) {
         if (len_ == 0) {
             app.statusOverlay().addWarning("Enter a name");
             return;
@@ -103,14 +69,8 @@ void NewGameState::update(App& app, const InputState& in, uint32_t dtUs) {
         return;
     }
 
-    for (uint16_t key = 0x20; key <= 0x7E; ++key) {
-        if (app.platform().input().pressed((uint8_t)key)) {
-            char c = '\0';
-            if (keyToChar((uint8_t)key, c)) {
-                appendChar(c);
-                return;
-            }
-        }
+    if (in.typedChar != '\0') {
+        (void)appendChar(in.typedChar);
     }
 }
 

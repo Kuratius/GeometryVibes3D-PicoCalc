@@ -2,7 +2,7 @@
   "width": 279,
   "height": 9,
   "backgroundColor565": 0,
-  "obstacleColor565": 2016,
+  "obstacleColor565": 63747,
   "cells": [
     {
       "x": 13,
@@ -678,6 +678,13 @@
       "mod": "invert"
     },
     {
+      "x": 205,
+      "y": 0,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_down"
+    },
+    {
       "x": 207,
       "y": 0,
       "type": "primitive",
@@ -1004,6 +1011,13 @@
       "type": "primitive",
       "shape": "right_tri",
       "mod": "invert"
+    },
+    {
+      "x": 133,
+      "y": 1,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_right"
     },
     {
       "x": 136,
@@ -3733,6 +3747,13 @@
       "type": "primitive",
       "shape": "right_tri",
       "mod": "rot_right"
+    },
+    {
+      "x": 50,
+      "y": 8,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_right"
     },
     {
       "x": 53,
@@ -5074,6 +5095,13 @@
       "mod": "invert"
     },
     {
+      "x": 205,
+      "y": 0,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_down"
+    },
+    {
       "x": 207,
       "y": 0,
       "type": "primitive",
@@ -5431,6 +5459,13 @@
       "type": "primitive",
       "shape": "right_tri",
       "mod": "invert"
+    },
+    {
+      "x": 133,
+      "y": 1,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_right"
     },
     {
       "x": 136,
@@ -8297,6 +8332,13 @@
       "type": "primitive",
       "shape": "right_tri",
       "mod": "rot_right"
+    },
+    {
+      "x": 50,
+      "y": 8,
+      "type": "primitive",
+      "shape": "star",
+      "offsetMod": "shift_right"
     },
     {
       "x": 53,

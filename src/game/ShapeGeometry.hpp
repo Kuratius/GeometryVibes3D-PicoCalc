@@ -27,7 +27,15 @@ struct EdgeBuffer {
     }
 };
 
-static inline fx shapeFi(int v) {
+static constexpr std::size_t kCubeEdgeCount = 12;
+static constexpr std::size_t kRightTriPrismEdgeCount = 9;
+static constexpr std::size_t kSquarePyramidEdgeCount = 8;
+static constexpr std::size_t kStarEdgeCount = 5;
+static constexpr std::size_t kMaxPrimitiveEdgeCount = kCubeEdgeCount;
+
+using PrimitiveEdgeBuffer = EdgeBuffer<kMaxPrimitiveEdgeCount>;
+
+static constexpr fx shapeFi(int v) {
     return fx::fromInt(v);
 }
 
@@ -35,7 +43,7 @@ template <std::size_t CAP>
 static inline void buildCubeLocal(EdgeBuffer<CAP>& out) {
     out.clear();
 
-    const Vec3fx verts[] = {
+    const Vec3fx verts[8] = {
         { fx::zero(),         fx::zero(),         fx::zero()         },
         { shapeFi(kCellSize), fx::zero(),         fx::zero()         },
         { shapeFi(kCellSize), shapeFi(kCellSize), fx::zero()         },
@@ -46,22 +54,25 @@ static inline void buildCubeLocal(EdgeBuffer<CAP>& out) {
         { fx::zero(),         shapeFi(kCellSize), shapeFi(kCellSize) }
     };
 
-    const int indices[] = {
-        0,1, 1,2, 2,3, 3,0,
-        4,5, 5,6, 6,7, 7,4,
-        0,4, 1,5, 2,6, 3,7
-    };
-
-    for (std::size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
-        out.push(verts[indices[i]], verts[indices[i + 1]]);
-    }
+    out.push(verts[0], verts[1]);
+    out.push(verts[1], verts[2]);
+    out.push(verts[2], verts[3]);
+    out.push(verts[3], verts[0]);
+    out.push(verts[4], verts[5]);
+    out.push(verts[5], verts[6]);
+    out.push(verts[6], verts[7]);
+    out.push(verts[7], verts[4]);
+    out.push(verts[0], verts[4]);
+    out.push(verts[1], verts[5]);
+    out.push(verts[2], verts[6]);
+    out.push(verts[3], verts[7]);
 }
 
 template <std::size_t CAP>
 static inline void buildRightTriPrismLocal(EdgeBuffer<CAP>& out) {
     out.clear();
 
-    const Vec3fx verts[] = {
+    const Vec3fx verts[6] = {
         { shapeFi(kCellSize), shapeFi(kCellSize), fx::zero()         },
         { shapeFi(kCellSize), fx::zero(),         fx::zero()         },
         { fx::zero(),         fx::zero(),         fx::zero()         },
@@ -70,41 +81,63 @@ static inline void buildRightTriPrismLocal(EdgeBuffer<CAP>& out) {
         { fx::zero(),         fx::zero(),         shapeFi(kCellSize) }
     };
 
-    const int indices[] = {
-        0,1, 1,2, 2,0,
-        3,4, 4,5, 5,3,
-        0,3, 1,4, 2,5
-    };
-
-    for (std::size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
-        out.push(verts[indices[i]], verts[indices[i + 1]]);
-    }
+    out.push(verts[0], verts[1]);
+    out.push(verts[1], verts[2]);
+    out.push(verts[2], verts[0]);
+    out.push(verts[3], verts[4]);
+    out.push(verts[4], verts[5]);
+    out.push(verts[5], verts[3]);
+    out.push(verts[0], verts[3]);
+    out.push(verts[1], verts[4]);
+    out.push(verts[2], verts[5]);
 }
 
 template <std::size_t CAP>
 static inline void buildSquarePyramidLocal(EdgeBuffer<CAP>& out, fx apexScale) {
     out.clear();
 
-    const Vec3fx verts[] = {
+    const Vec3fx verts[5] = {
         { shapeFi(kCellSize / 2), apexScale * shapeFi(kCellSize), shapeFi(kCellSize / 2) },
-        { fx::zero(),             fx::zero(),                    shapeFi(kCellSize)       },
-        { shapeFi(kCellSize),     fx::zero(),                    shapeFi(kCellSize)       },
-        { shapeFi(kCellSize),     fx::zero(),                    fx::zero()               },
-        { fx::zero(),             fx::zero(),                    fx::zero()               }
+        { fx::zero(),             fx::zero(),                     shapeFi(kCellSize)     },
+        { shapeFi(kCellSize),     fx::zero(),                     shapeFi(kCellSize)     },
+        { shapeFi(kCellSize),     fx::zero(),                     fx::zero()             },
+        { fx::zero(),             fx::zero(),                     fx::zero()             }
     };
 
-    const int indices[] = {
-        0,1, 0,2, 0,3, 0,4,
-        1,2, 2,3, 3,4, 4,1
-    };
-
-    for (std::size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 2) {
-        out.push(verts[indices[i]], verts[indices[i + 1]]);
-    }
+    out.push(verts[0], verts[1]);
+    out.push(verts[0], verts[2]);
+    out.push(verts[0], verts[3]);
+    out.push(verts[0], verts[4]);
+    out.push(verts[1], verts[2]);
+    out.push(verts[2], verts[3]);
+    out.push(verts[3], verts[4]);
+    out.push(verts[4], verts[1]);
 }
 
 template <std::size_t CAP>
-static inline void buildPrimitiveLocal(EdgeBuffer<CAP>& out, ObstacleId sid) {
+static inline void buildStarLocal(EdgeBuffer<CAP>& out) {
+    out.clear();
+
+    // Upright 5-point star centered in the XY plane at Z = 0.
+    // Sized to 80% of a cell overall, so radius = 40% of cell.
+    const fx r = shapeFi(kCellSize) * fx::fromRatio(2, 5);
+
+    const Vec3fx verts[5] = {
+        { fx::zero(),                    -r,                             fx::zero() },
+        { r * fx::fromRatio( 588, 1000),  r * fx::fromRatio( 809, 1000), fx::zero() },
+        { r * fx::fromRatio(-951, 1000),  r * fx::fromRatio(-309, 1000), fx::zero() },
+        { r * fx::fromRatio( 951, 1000),  r * fx::fromRatio(-309, 1000), fx::zero() },
+        { r * fx::fromRatio(-588, 1000),  r * fx::fromRatio( 809, 1000), fx::zero() },
+    };
+
+    out.push(verts[0], verts[1]);
+    out.push(verts[1], verts[2]);
+    out.push(verts[2], verts[3]);
+    out.push(verts[3], verts[4]);
+    out.push(verts[4], verts[0]);
+}
+
+static inline void buildPrimitiveLocal(PrimitiveEdgeBuffer& out, ObstacleId sid) {
     switch (sid) {
         case ObstacleId::Square:
             buildCubeLocal(out);
@@ -120,6 +153,10 @@ static inline void buildPrimitiveLocal(EdgeBuffer<CAP>& out, ObstacleId sid) {
 
         case ObstacleId::FullSpike:
             buildSquarePyramidLocal(out, fx::one());
+            break;
+
+        case ObstacleId::Star:
+            buildStarLocal(out);
             break;
 
         default:

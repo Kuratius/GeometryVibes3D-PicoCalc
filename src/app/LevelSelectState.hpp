@@ -10,7 +10,6 @@ namespace gv {
 class LevelSelectState final : public IAppState {
 public:
     void onEnter(App& app) override;
-    void onExit(App& app) override;
 
     void update(App& app, const InputState& in, uint32_t dtUs) override;
     void render(App& app, IDisplay& display, RenderList& rl) override;
@@ -26,7 +25,7 @@ private:
     std::size_t levelCount_ = 0;
 
     Text menuTitle_{ "SELECT LEVEL" };
-    Text help_{ "[DEL] Erase  [ESC] Back" };
+    Text help_{ "[ESC] Back" };
     std::array<Text, kLevelTextCap> levelTexts_{};
 };
 

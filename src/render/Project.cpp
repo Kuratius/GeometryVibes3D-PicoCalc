@@ -182,7 +182,6 @@ static int32_t projectToNormal(const int32_t* a, const int32_t* normalVector) {
     for (int i = 0; i < 3; i++) {
         int32_t ta = a[i] >> 8;
         int32_t tb = normalVector[i] >> 8;
-        //workaround until I figure out a better way
         sum += ta * tb;
     }
     return sum;
@@ -220,8 +219,6 @@ static inline Vec3fx cross3_normal(const Vec3fx& v1, const Vec3fx& v2) {
 
 void buildCameraBasis(Camera& cam) {
     Vec3fx tgt = cam.target;
-    //to do: probably use 2.14 or 4.12 format for normalized vectors
-    //to avoid 64 bit multiplications and do 32-bit muls instead
     cam.fwd   = normalize3(sub3(tgt, cam.pos));
     //cam.up    = normalize3(cam.up); //this probably isnt necessary?
     cam.right = cross3_normal(cam.fwd, cam.up);

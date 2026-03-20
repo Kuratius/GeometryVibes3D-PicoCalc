@@ -8,7 +8,7 @@
 
 namespace gv {
 
-static inline fx fi(int v) { return fx::fromInt(v); }
+static constexpr fx fi(int v) { return fx::fromInt(v); }
 
 static inline Vec3fx add3(const Vec3fx& a, const Vec3fx& b) {
     return Vec3fx{ a.x + b.x, a.y + b.y, a.z + b.z };
@@ -51,19 +51,6 @@ static inline Vec3fx makeVec3(fx x, fx y, fx z) {
     return Vec3fx{ x, y, z };
 }
 
-static inline void addStarLine(RenderList& rl,
-                               const Camera& cam,
-                               const Vec3fx& center,
-                               fx x0, fx y0,
-                               fx x1, fx y1,
-                               uint16_t color) {
-    line3(
-        makeVec3(center.x + x0, center.y + y0, center.z),
-        makeVec3(center.x + x1, center.y + y1, center.z),
-        color, cam, rl
-    );
-}
-
 static inline void rotateXYAround(Vec3fx& p, const Vec3fx& pivot, fx c, fx s) {
     const fx dx = p.x - pivot.x;
     const fx dy = p.y - pivot.y;
@@ -100,9 +87,10 @@ static inline void transformEdgePoint(Vec3fx& p,
     }
 }
 
+template <std::size_t CAP>
 static inline void drawTransformedEdges(RenderList& rl,
                                         const Camera& cam,
-                                        const EdgeBuffer<16>& edges,
+                                        const EdgeBuffer<CAP>& edges,
                                         const Vec3fx& translate,
                                         ShapeMod mod,
                                         const Vec3fx* modOrigin,
@@ -460,7 +448,7 @@ void SceneBuilder::addShip(RenderList &rl, const Camera& cam, const Vec3fx &pos,
 }
 
 void SceneBuilder::addCube(RenderList &rl, const Camera& cam, const Vec3fx &pos, uint16_t color) const {
-    EdgeBuffer<16> edges{};
+    EdgeBuffer<kCubeEdgeCount> edges{};
     buildCubeLocal(edges);
     drawTransformedEdges(
         rl,
@@ -480,7 +468,7 @@ void SceneBuilder::addCube(RenderList &rl, const Camera& cam, const Vec3fx &pos,
 
 void SceneBuilder::addSquarePyramid(RenderList& rl, const Camera& cam, const Vec3fx& pos, uint16_t color,
                                     ShapeMod mod, fx apexScale, const Vec3fx& origin) const {
-    EdgeBuffer<16> edges{};
+    EdgeBuffer<kSquarePyramidEdgeCount> edges{};
     buildSquarePyramidLocal(edges, apexScale);
     drawTransformedEdges(
         rl,
@@ -500,7 +488,7 @@ void SceneBuilder::addSquarePyramid(RenderList& rl, const Camera& cam, const Vec
 
 void SceneBuilder::addRightTriPrism(RenderList& rl, const Camera& cam, const Vec3fx& pos, uint16_t color,
                                     ShapeMod mod, const Vec3fx& origin) const {
-    EdgeBuffer<16> edges{};
+    EdgeBuffer<kRightTriPrismEdgeCount> edges{};
     buildRightTriPrismLocal(edges);
     drawTransformedEdges(
         rl,
@@ -542,7 +530,7 @@ void SceneBuilder::addAnimatedPrimitive(RenderList& rl,
         fx::zero()
     };
 
-    EdgeBuffer<16> edges{};
+    PrimitiveEdgeBuffer edges{};
     buildPrimitiveLocal(edges, sid);
 
     drawTransformedEdges(
@@ -564,66 +552,29 @@ void SceneBuilder::addAnimatedPrimitive(RenderList& rl,
 void SceneBuilder::addStar(RenderList& rl,
                            const Camera& cam,
                            const Vec3fx& center,
-                           fx turns,
+                           fx spinTurns,
                            uint16_t color) const {
-    // 5-point star, billboarded in XY.
-    // Vertical-axis spin is approximated by scaling X by cos(turns).
+    EdgeBuffer<kStarEdgeCount> edges{};
+    buildStarLocal(edges);
+
     fx c = fx::one();
     fx s = fx::zero();
-    turnsToSinCos(turns, c, s);
+    turnsToSinCos(spinTurns, c, s);
 
-    const fx xScale = abs(c);
+    for (std::size_t i = 0; i < edges.count; ++i) {
+        Vec3fx a = edges.edges[i].a;
+        Vec3fx b = edges.edges[i].b;
 
-    // Avoid collapsing to a perfectly invisible line.
-    const fx minScale = fx::fromRatio(1, 5);
-    const fx sx = (xScale < minScale) ? minScale : xScale;
+        // Cheap billboard spin around vertical axis:
+        // compress horizontal extent by cos(turns).
+        a.x = a.x * c;
+        b.x = b.x * c;
 
-    // 80% cell diameter -> radius 40% of cell.
-    const fx outerR = fx::fromRatio(kCellSize * 4, 10);
-    const fx innerR = fx::fromRatio(kCellSize * 16, 100); // ~0.4 of outer radius
+        a = add3(a, center);
+        b = add3(b, center);
 
-    // Outer vertices, starting at top, then every 72 degrees clockwise.
-    // Using integer-milli constants keeps it cheap and deterministic.
-    static constexpr int kOuterMilli[5][2] = {
-        {    0, -1000 },
-        {  951,  -309 },
-        {  588,   809 },
-        { -588,   809 },
-        { -951,  -309 },
-    };
-
-    static constexpr int kInnerMilli[5][2] = {
-        {    0,  -382 },
-        {  363,  -118 },
-        {  224,   309 },
-        { -224,   309 },
-        { -363,  -118 },
-    };
-
-    Vec3fx outer[5]{};
-    Vec3fx inner[5]{};
-
-    for (int i = 0; i < 5; ++i) {
-        outer[i] = makeVec3(
-            gv::mulInt(outerR, kOuterMilli[i][0]) * sx / fx::fromInt(1000),
-            gv::mulInt(outerR, kOuterMilli[i][1]) / fx::fromInt(1000),
-            fx::zero()
-        );
-
-        inner[i] = makeVec3(
-            gv::mulInt(innerR, kInnerMilli[i][0]) * sx / fx::fromInt(1000),
-            gv::mulInt(innerR, kInnerMilli[i][1]) / fx::fromInt(1000),
-            fx::zero()
-        );
+        line3(a, b, color, cam, rl);
     }
-
-    // Draw the classic 5 pentagram lines between outer vertices:
-    // 0->2->4->1->3->0
-    line3(add3(center, outer[0]), add3(center, outer[2]), color, cam, rl);
-    line3(add3(center, outer[2]), add3(center, outer[4]), color, cam, rl);
-    line3(add3(center, outer[4]), add3(center, outer[1]), color, cam, rl);
-    line3(add3(center, outer[1]), add3(center, outer[3]), color, cam, rl);
-    line3(add3(center, outer[3]), add3(center, outer[0]), color, cam, rl);
 }
 
 void SceneBuilder::addText(RenderList& rl, const Text& text, int16_t x, int16_t y,

@@ -28,7 +28,7 @@ SHAPE_SQUARE = "square"
 SHAPE_RIGHT_TRI = "right_tri"
 SHAPE_HALF_SPIKE = "half_spike"
 SHAPE_FULL_SPIKE = "full_spike"
-SHAPE_STAR = "star"  # future use
+SHAPE_STAR = "star"
 SHAPES = [SHAPE_SQUARE, SHAPE_RIGHT_TRI, SHAPE_HALF_SPIKE, SHAPE_FULL_SPIKE]
 
 # Modifiers (optional)
@@ -37,18 +37,19 @@ MOD_ROT_L = "rot_left"
 MOD_ROT_R = "rot_right"
 MOD_INVERT = "invert"
 MODS = [MOD_NONE, MOD_ROT_L, MOD_ROT_R, MOD_INVERT]
-MOD_SHAPES = {SHAPE_RIGHT_TRI, SHAPE_HALF_SPIKE, SHAPE_FULL_SPIKE, SHAPE_STAR}
+MOD_SHAPES = {SHAPE_RIGHT_TRI, SHAPE_HALF_SPIKE, SHAPE_FULL_SPIKE}
 
 # Editor paint modes
 PAINT_MODE_PRIMITIVE = "primitive"
 PAINT_MODE_ANIM_REF = "anim_ref"
+PAINT_MODE_STAR = "star"
 
-# Anim group offset mods
-AG_OFF_NONE = "none"
-AG_OFF_RIGHT = "shift_right"
-AG_OFF_DOWN = "shift_down"
-AG_OFF_DOWN_RIGHT = "shift_down_right"
-ANIM_GROUP_OFFSET_MODS = [AG_OFF_NONE, AG_OFF_RIGHT, AG_OFF_DOWN, AG_OFF_DOWN_RIGHT]
+# Shared packed-cell offset mods
+OFF_NONE = "none"
+OFF_RIGHT = "shift_right"
+OFF_DOWN = "shift_down"
+OFF_DOWN_RIGHT = "shift_down_right"
+OFFSET_MODS = [OFF_NONE, OFF_RIGHT, OFF_DOWN, OFF_DOWN_RIGHT]
 
 # Colors
 PRIM_OUTLINE = "#d0d0d0"
@@ -57,6 +58,7 @@ ANIM_OUTLINE = "#4fc3f7"
 ANIM_FILL = ""
 ANIM_OWNING_SELECTED = "#ffd54a"
 ANIM_GHOST = "#7fdfff"
+STAR_OUTLINE = "#ffd54a"
 
 # -----------------------------
 # Endcap
@@ -126,11 +128,11 @@ MOD_ID = {
     "invert": 3,
 }
 
-ANIM_GROUP_OFFSET_ID = {
-    AG_OFF_NONE: 0,
-    AG_OFF_RIGHT: 1,
-    AG_OFF_DOWN: 2,
-    AG_OFF_DOWN_RIGHT: 3,
+OFFSET_MOD_ID = {
+    OFF_NONE: 0,
+    OFF_RIGHT: 1,
+    OFF_DOWN: 2,
+    OFF_DOWN_RIGHT: 3,
 }
 
 # -----------------------------
@@ -141,29 +143,35 @@ ANIM_GROUP_OFFSET_ID = {
 class PrimitiveObstacle:
     shape: str
     mod: str = MOD_NONE
+    offset_mod: str = OFF_NONE
 
     def to_obj(self) -> Dict[str, Any]:
         o = {"type": "primitive", "shape": self.shape}
         if self.mod != MOD_NONE:
             o["mod"] = self.mod
+        if self.shape == SHAPE_STAR and self.offset_mod != OFF_NONE:
+            o["offsetMod"] = self.offset_mod
         return o
 
     @staticmethod
     def from_obj(obj: Dict[str, Any]) -> "PrimitiveObstacle":
         shape = str(obj.get("shape", SHAPE_SQUARE))
         mod = str(obj.get("mod", MOD_NONE))
-        if shape not in SHAPES:
+
+        if shape not in SHAPES and shape != SHAPE_STAR:
             shape = SHAPE_SQUARE
+
         if mod not in MODS:
             mod = MOD_NONE
         if shape not in MOD_SHAPES:
             mod = MOD_NONE
+
         return PrimitiveObstacle(shape=shape, mod=mod)
 
 @dataclass(frozen=True)
 class AnimGroupRef:
     group_index: int
-    offset_mod: str = AG_OFF_NONE
+    offset_mod: str = OFF_NONE
 
     def to_obj(self) -> Dict[str, Any]:
         return {
@@ -176,9 +184,9 @@ class AnimGroupRef:
     def from_obj(obj: Dict[str, Any]) -> "AnimGroupRef":
         gi = int(obj.get("groupIndex", 0))
         gi = max(0, min(MAX_ANIM_GROUPS - 1, gi))
-        off = str(obj.get("offsetMod", AG_OFF_NONE))
-        if off not in ANIM_GROUP_OFFSET_MODS:
-            off = AG_OFF_NONE
+        off = str(obj.get("offsetMod", OFF_NONE))
+        if off not in OFFSET_MODS:
+            off = OFF_NONE
         return AnimGroupRef(group_index=gi, offset_mod=off)
 
 CellValue = Union[PrimitiveObstacle, AnimGroupRef]
@@ -204,7 +212,7 @@ class AnimPrimitive:
     def from_obj(obj: Dict[str, Any]) -> "AnimPrimitive":
         shape = str(obj.get("shape", SHAPE_SQUARE))
         mod = str(obj.get("mod", MOD_NONE))
-        if shape not in SHAPES and shape != SHAPE_STAR:
+        if shape not in SHAPES:
             shape = SHAPE_SQUARE
         if mod not in MODS:
             mod = MOD_NONE
@@ -397,6 +405,16 @@ class Level:
     def portal_abs(self) -> Tuple[int, int]:
         last = self.width - 1
         return (last + int(PORTAL_REL["dx"]), int(PORTAL_REL["y"]))
+    
+    def count_authored_stars(self) -> int:
+        count = 0
+        for cell in self.cells.values():
+            if isinstance(cell, PrimitiveObstacle) and cell.shape == SHAPE_STAR:
+                count += 1
+        return count
+
+    def can_place_more_stars(self) -> bool:
+        return self.count_authored_stars() < 3
 
     def used_anim_def_count(self) -> int:
         last_used = -1
@@ -412,8 +430,21 @@ class Level:
                 m = max(m, len(a.primitives))
         return m
 
+    def count_stars(self) -> int:
+        count = 0
+        for y in range(self.height):
+            for x in range(self.width):
+                cell = self.effective_cell_at(x, y)
+                if isinstance(cell, PrimitiveObstacle) and cell.shape == SHAPE_STAR:
+                    count += 1
+        return count
+
     def write_bin(self, path: str) -> None:
         self.strip_endcap_from_authored()
+
+        star_count = self.count_stars()
+        if star_count != 3:
+            raise ValueError(f"Level must contain exactly 3 stars; found {star_count}.")
 
         width = int(self.width)
         portal_dx_signed = int(PORTAL_REL["dx"])
@@ -474,7 +505,7 @@ class Level:
         header += bytes([LEVEL_VERSION])
         header += width.to_bytes(2, "little", signed=False)
         header += int.to_bytes(portal_dx_signed, 1, "little", signed=True)
-        header += b"\x00"  # reserved0
+        header += b"\x00"
         header += background_color_565.to_bytes(2, "little", signed=False)
         header += obstacle_color_565.to_bytes(2, "little", signed=False)
         header += bytes([anim_def_count & 0xFF])
@@ -497,12 +528,16 @@ class Level:
                         mod_id = 0
                     elif isinstance(cell, PrimitiveObstacle):
                         obs_id = SHAPE_ID.get(cell.shape, 0) & 0x0F
-                        mod_id = MOD_ID.get(cell.mod, 0) & 0x03
-                        if cell.shape not in MOD_SHAPES:
-                            mod_id = 0
+
+                        if cell.shape == SHAPE_STAR:
+                            mod_id = OFFSET_MOD_ID.get(cell.offset_mod, 0) & 0x03
+                        else:
+                            mod_id = MOD_ID.get(cell.mod, 0) & 0x03
+                            if cell.shape not in MOD_SHAPES:
+                                mod_id = 0
                     elif isinstance(cell, AnimGroupRef):
                         obs_id = (8 + int(cell.group_index)) & 0x0F
-                        mod_id = ANIM_GROUP_OFFSET_ID.get(cell.offset_mod, 0) & 0x03
+                        mod_id = OFFSET_MOD_ID.get(cell.offset_mod, 0) & 0x03
                     else:
                         obs_id = 0
                         mod_id = 0
@@ -688,8 +723,9 @@ class EditorApp:
         self.paint_mode_var = tk.StringVar(value=PAINT_MODE_PRIMITIVE)
         self.shape_var = tk.StringVar(value=SHAPE_SQUARE)
         self.mod_var = tk.StringVar(value=MOD_NONE)
+        self.star_offset_var = tk.StringVar(value=OFF_NONE)
         self.selected_anim_slot: Optional[int] = None
-        self.anim_offset_var = tk.StringVar(value=AG_OFF_NONE)
+        self.anim_offset_var = tk.StringVar(value=OFF_NONE)
         self.base_scale_var = tk.StringVar(value="1.00")
 
         self._painting = False
@@ -766,7 +802,6 @@ class EditorApp:
         outer = tk.Frame(self.root)
         outer.pack(fill="both", expand=True)
 
-        # Left side: vertically scrollable controls
         left_wrap = tk.Frame(outer)
         left_wrap.pack(side="left", fill="y")
 
@@ -822,10 +857,33 @@ class EditorApp:
         tk.Button(obs_row, text="Choose…", command=self.choose_obstacle_color).pack(side="right")
 
         tk.Label(left, text="Mode", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(6, 0))
-        tk.Radiobutton(left, text="Paint primitives", variable=self.paint_mode_var,
-                       value=PAINT_MODE_PRIMITIVE, command=self._refresh_animation_ui).pack(anchor="w")
-        tk.Radiobutton(left, text="Paint animation refs", variable=self.paint_mode_var,
-                       value=PAINT_MODE_ANIM_REF, command=self._refresh_animation_ui).pack(anchor="w")
+
+        self.paint_primitives_rb = tk.Radiobutton(
+            left,
+            text="Paint primitives",
+            variable=self.paint_mode_var,
+            value=PAINT_MODE_PRIMITIVE,
+            command=self._refresh_animation_ui
+        )
+        self.paint_primitives_rb.pack(anchor="w")
+
+        self.paint_anim_refs_rb = tk.Radiobutton(
+            left,
+            text="Paint animation refs",
+            variable=self.paint_mode_var,
+            value=PAINT_MODE_ANIM_REF,
+            command=self._refresh_animation_ui
+        )
+        self.paint_anim_refs_rb.pack(anchor="w")
+
+        self.paint_stars_rb = tk.Radiobutton(
+            left,
+            text="Paint stars",
+            variable=self.paint_mode_var,
+            value=PAINT_MODE_STAR,
+            command=self._refresh_animation_ui
+        )
+        self.paint_stars_rb.pack(anchor="w")
 
         tk.Label(left, text="").pack(pady=6)
 
@@ -841,6 +899,15 @@ class EditorApp:
             rb.pack(anchor="w")
             self.mod_buttons.append(rb)
 
+        tk.Label(left, text="Star Offset", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(10, 0))
+        for off, label in [
+            (OFF_NONE, "None"),
+            (OFF_RIGHT, "Shift right"),
+            (OFF_DOWN, "Shift down"),
+            (OFF_DOWN_RIGHT, "Shift down-right"),
+        ]:
+            tk.Radiobutton(left, text=label, variable=self.star_offset_var, value=off).pack(anchor="w")
+
         tk.Label(left, text="").pack(pady=6)
 
         tk.Label(left, text="Animations", font=("Segoe UI", 10, "bold")).pack(anchor="w")
@@ -849,10 +916,10 @@ class EditorApp:
 
         tk.Label(left, text="Anim Ref Offset", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(4, 0))
         for off, label in [
-            (AG_OFF_NONE, "None"),
-            (AG_OFF_RIGHT, "Shift right"),
-            (AG_OFF_DOWN, "Shift down"),
-            (AG_OFF_DOWN_RIGHT, "Shift down-right"),
+            (OFF_NONE, "None"),
+            (OFF_RIGHT, "Shift right"),
+            (OFF_DOWN, "Shift down"),
+            (OFF_DOWN_RIGHT, "Shift down-right"),
         ]:
             tk.Radiobutton(left, text=label, variable=self.anim_offset_var, value=off).pack(anchor="w")
 
@@ -895,7 +962,7 @@ class EditorApp:
         self.pivot_hy_var = tk.IntVar(value=0)
         tk.Spinbox(pivot_row, from_=-32, to=32, width=5, textvariable=self.pivot_hy_var,
                 command=self.apply_anim_pivot).pack(side="left", padx=(4, 0))
-        
+
         base_row = tk.Frame(left)
         base_row.pack(fill="x", pady=(2, 4))
         tk.Label(base_row, text="Base scale:").pack(side="left")
@@ -956,7 +1023,7 @@ class EditorApp:
                       "• Mouse wheel: scroll horizontally\n"
                       "• Endcap zone (last 6 cols) is locked",
                  justify="left", fg="#444").pack(anchor="w")
-        
+
         def _on_left_frame_configure(event):
             self.left_canvas.configure(scrollregion=self.left_canvas.bbox("all"))
 
@@ -971,7 +1038,7 @@ class EditorApp:
         self.left_canvas.bind("<Button-5>", lambda e: self.left_canvas.yview_scroll(3, "units"))
         left.bind("<MouseWheel>", self.on_left_panel_wheel)
         left.bind("<Button-4>", lambda e: self.left_canvas.yview_scroll(-3, "units"))
-        left.bind("<Button-5>", lambda e: self.left_canvas.yview_scroll(3, "units"))        
+        left.bind("<Button-5>", lambda e: self.left_canvas.yview_scroll(3, "units"))
 
         self.canvas = tk.Canvas(right, bg="#101010", highlightthickness=0)
         self.hbar = tk.Scrollbar(right, orient="horizontal", command=self.canvas.xview)
@@ -1015,13 +1082,13 @@ class EditorApp:
         if self.selected_anim_slot is None:
             return None
         return self.level.anim_defs[self.selected_anim_slot]
-    
+
     def current_anim_step_index(self) -> Optional[int]:
         sel = self.step_listbox.curselection()
         if not sel:
             return None
         return int(sel[0])
-    
+
     def q7_to_scale_text(self, q7: int) -> str:
         return f"{q7 / 128.0:.2f}"
 
@@ -1344,7 +1411,8 @@ class EditorApp:
         x0, y0, x1, y1 = b
         for y in range(y0, y1 + 1):
             for x in range(x0, x1 + 1):
-                if isinstance(self.level.get_cell(x, y), PrimitiveObstacle):
+                cell = self.level.get_cell(x, y)
+                if isinstance(cell, PrimitiveObstacle) and cell.shape != SHAPE_STAR:
                     return True
         return False
 
@@ -1359,6 +1427,17 @@ class EditorApp:
         can_new = free is not None and self._has_selected_primitives()
         self.new_anim_btn.configure(state=("normal" if can_new else "disabled"))
 
+        star_count = self.level.count_authored_stars()
+        can_paint_stars = star_count < 3
+
+        self.paint_stars_rb.configure(
+            text=f"Paint stars ({star_count}/3)",
+            state=("normal" if can_paint_stars else "disabled")
+        )
+
+        if not can_paint_stars and self.paint_mode_var.get() == PAINT_MODE_STAR:
+            self.paint_mode_var.set(PAINT_MODE_PRIMITIVE)
+
         for i in range(MAX_ANIM_GROUPS):
             a = self.level.anim_defs[i]
             text = f"{i+1}: <empty>" if a is None else f"{i+1}: {a.name}"
@@ -1371,6 +1450,7 @@ class EditorApp:
                 self.anim_slot_labels[i].configure(fg="#ffd54a")
             else:
                 self.anim_slot_labels[i].configure(fg="#000000")
+
         self.refresh_anim_editor_panel()
 
     def select_anim_slot(self, idx: int) -> None:
@@ -1690,13 +1770,13 @@ class EditorApp:
             shift_y = True
 
         if shift_x and shift_y:
-            off = AG_OFF_DOWN_RIGHT
+            off = OFF_DOWN_RIGHT
         elif shift_x:
-            off = AG_OFF_RIGHT
+            off = OFF_RIGHT
         elif shift_y:
-            off = AG_OFF_DOWN
+            off = OFF_DOWN
         else:
-            off = AG_OFF_NONE
+            off = OFF_NONE
 
         return int(cell_x), int(cell_y), off
 
@@ -1716,7 +1796,7 @@ class EditorApp:
         for y in range(y0, y1 + 1):
             for x in range(x0, x1 + 1):
                 cell = self.level.get_cell(x, y)
-                if isinstance(cell, PrimitiveObstacle):
+                if isinstance(cell, PrimitiveObstacle) and cell.shape != SHAPE_STAR:
                     selected_prims.append((x, y, cell))
                     selected_cells.append((x, y))
 
@@ -1814,7 +1894,7 @@ class EditorApp:
     def redraw_all(self) -> None:
         self.canvas.delete("all")
         self._rebuild_canvas_region()
-        self.canvas.configure(bg=self.rgb565_to_hex(self.level.background_color_565))        
+        self.canvas.configure(bg=self.rgb565_to_hex(self.level.background_color_565))
 
         for y in range(self.level.height):
             for x in range(self.level.width):
@@ -1899,7 +1979,7 @@ class EditorApp:
             width=2,
             tags=tag
         )
-    
+
     def _draw_primitive_polygon(self, x0, y0, x1, y1, shape: str, mod: str,
                                 tag: str, fill: str, outline: str, stipple: str = "") -> None:
         use_mod = mod if shape in MOD_SHAPES else MOD_NONE
@@ -1919,18 +1999,46 @@ class EditorApp:
             tags=tag
         )
 
+    def _draw_star_cell(self, x: int, y: int, offset_mod: str, tag: str) -> None:
+        cx = x + 0.5
+        cy = y + 0.5
+
+        if offset_mod in (OFF_RIGHT, OFF_DOWN_RIGHT):
+            cx += 0.5
+        if offset_mod in (OFF_DOWN, OFF_DOWN_RIGHT):
+            cy += 0.5
+
+        px = cx * CELL
+        py = cy * CELL + self._y_offset_px
+
+        r = CELL * 0.40
+
+        pts = []
+        for i in range(5):
+            a = -math.pi / 2 + i * (2.0 * math.pi / 5.0)
+            pts.append((px + math.cos(a) * r, py + math.sin(a) * r))
+
+        order = [0, 2, 4, 1, 3, 0]
+        for i in range(5):
+            x0, y0 = pts[order[i]]
+            x1, y1 = pts[order[i + 1]]
+            self.canvas.create_line(x0, y0, x1, y1, fill=STAR_OUTLINE, width=2, tags=tag)
+
     def _draw_cell(self, x: int, y: int, tag: str) -> None:
         x0, y0, x1, y1 = self._cell_rect(x, y)
 
         cell = self.level.get_cell(x, y)
         if isinstance(cell, PrimitiveObstacle):
-            self._draw_primitive_polygon(
-                x0, y0, x1, y1,
-                cell.shape, cell.mod,
-                tag,
-                "",
-                self.rgb565_to_hex(self.level.obstacle_color_565)
-            )
+            if cell.shape == SHAPE_STAR:
+                self._draw_star_cell(x, y, cell.offset_mod, tag)
+            else:
+                self._draw_primitive_polygon(
+                    x0, y0, x1, y1,
+                    cell.shape, cell.mod,
+                    tag,
+                    "",
+                    self.rgb565_to_hex(self.level.obstacle_color_565)
+                )
         elif isinstance(cell, AnimGroupRef):
             self._draw_anim_group_preview(x, y, cell, tag)
 
@@ -1949,9 +2057,9 @@ class EditorApp:
         anchor_col = cell_x + 0.5
         anchor_row = cell_y + 0.5
 
-        if ref.offset_mod in (AG_OFF_RIGHT, AG_OFF_DOWN_RIGHT):
+        if ref.offset_mod in (OFF_RIGHT, OFF_DOWN_RIGHT):
             anchor_col += 0.5
-        if ref.offset_mod in (AG_OFF_DOWN, AG_OFF_DOWN_RIGHT):
+        if ref.offset_mod in (OFF_DOWN, OFF_DOWN_RIGHT):
             anchor_row += 0.5
 
         pivot_col = anchor_col + 0.5 * anim.pivot_hx
@@ -2317,20 +2425,43 @@ class EditorApp:
 
         self.touch_cell_before(x, y)
 
-        if self.paint_mode_var.get() == PAINT_MODE_ANIM_REF:
+        mode = self.paint_mode_var.get()
+
+        if mode == PAINT_MODE_ANIM_REF:
             if self.selected_anim_slot is None or self.level.anim_defs[self.selected_anim_slot] is None:
                 self.touch_cell_after(x, y)
                 return
+
             self.level.set_cell(
                 x, y,
                 AnimGroupRef(group_index=self.selected_anim_slot, offset_mod=self.anim_offset_var.get())
             )
+
+        elif mode == PAINT_MODE_STAR:
+            existing = self.level.get_cell(x, y)
+            if isinstance(existing, PrimitiveObstacle) and existing.shape == SHAPE_STAR:
+                # allow repainting/updating offset in-place without consuming a slot
+                self.level.set_cell(
+                    x, y,
+                    PrimitiveObstacle(shape=SHAPE_STAR, mod=MOD_NONE, offset_mod=self.star_offset_var.get())
+                )
+            elif self.level.can_place_more_stars():
+                self.level.set_cell(
+                    x, y,
+                    PrimitiveObstacle(shape=SHAPE_STAR, mod=MOD_NONE, offset_mod=self.star_offset_var.get())
+                )
+            else:
+                self.touch_cell_after(x, y)
+                return
+
         else:
             shape = self.shape_var.get()
             mod = self.mod_var.get()
+
             if shape not in MOD_SHAPES:
                 mod = MOD_NONE
-            self.level.set_cell(x, y, PrimitiveObstacle(shape=shape, mod=mod))
+
+            self.level.set_cell(x, y, PrimitiveObstacle(shape=shape, mod=mod, offset_mod=OFF_NONE))
 
         self.touch_cell_after(x, y)
         self.redraw_cell(x, y)

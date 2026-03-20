@@ -14,10 +14,6 @@ void HomeMenuState::onEnter(App& app) {
     }
 }
 
-void HomeMenuState::onExit(App& app) {
-    (void)app;
-}
-
 bool HomeMenuState::itemEnabled(const App& app, std::size_t i) const {
     switch (i) {
         case Continue:   return app.canContinue();

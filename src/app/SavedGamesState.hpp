@@ -29,7 +29,7 @@ private:
     Text title_{ "SAVED GAMES" };
     Text help_{ "[DEL] Erase  [ESC] Back" };
     Text confirm1_{ "Delete this save?" };
-    Text confirm2_{ "[ENTER] Confirm  [BACK] Cancel" };
+    Text confirm2_{ "[ENTER] Confirm  [ESC] Cancel" };
     std::array<Text, kTextCap> saveTexts_{};
 };
 

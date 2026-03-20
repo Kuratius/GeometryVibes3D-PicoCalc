@@ -28,7 +28,7 @@ private:
     std::size_t selected_ = 0;
 
     Text title_{ "OPTIONS" };
-    Text help_{ "[ENTER/SPACE] Toggle  [BACK] Home" };
+    Text help_{ "[ENTER/SPACE] Toggle  [ESC] Home" };
     std::array<Text, Count> items_{};
 };
 

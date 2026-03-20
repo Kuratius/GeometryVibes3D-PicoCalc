@@ -123,11 +123,11 @@ static inline void buildStarLocal(EdgeBuffer<CAP>& out) {
     const fx r = shapeFi(kCellSize) * fx::fromRatio(2, 5);
 
     const Vec3fx verts[5] = {
-        { fx::zero(),                    -r,                             fx::zero() },
-        { r * fx::fromRatio( 588, 1000),  r * fx::fromRatio( 809, 1000), fx::zero() },
-        { r * fx::fromRatio(-951, 1000),  r * fx::fromRatio(-309, 1000), fx::zero() },
-        { r * fx::fromRatio( 951, 1000),  r * fx::fromRatio(-309, 1000), fx::zero() },
-        { r * fx::fromRatio(-588, 1000),  r * fx::fromRatio( 809, 1000), fx::zero() },
+        { fx::zero(),                     r,                             fx::zero() },
+        { r * fx::fromRatio( 588, 1000), -r * fx::fromRatio( 809, 1000), fx::zero() },
+        { r * fx::fromRatio(-951, 1000),  r * fx::fromRatio( 309, 1000), fx::zero() },
+        { r * fx::fromRatio( 951, 1000),  r * fx::fromRatio( 309, 1000), fx::zero() },
+        { r * fx::fromRatio(-588, 1000), -r * fx::fromRatio( 809, 1000), fx::zero() },
     };
 
     out.push(verts[0], verts[1]);

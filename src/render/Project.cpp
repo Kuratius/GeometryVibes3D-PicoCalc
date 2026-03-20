@@ -181,10 +181,11 @@ static int32_t projectToNormal(const int32_t* a, const int32_t* normalVector) {
     int32_t sum = 0;
     for (int i = 0; i < 3; i++) {
         int32_t ta = a[i] >> 8;
-        int32_t tb = normalVector[i] >> 8;
+        int32_t tb = normalVector[i] >> 4;
+        //workaround until I figure out a better way
         sum += ta * tb;
     }
-    return sum;
+    return sum>>4;
 }
 
 static inline fx projectNormal3(const Vec3fx& v1, const Vec3fx& v2) {

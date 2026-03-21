@@ -228,7 +228,7 @@ void buildCameraBasis(Camera& cam) {
 static inline int32_t roundNearest(int32_t a)
 {
     const int shift=16;
-    //lsrs doesnt update carry flag for shift by 0
+    //asrs doesnt update carry flag for shift by 0
     //this branch should get pruned, but it is important
     //if you want to reuse this code elsewhere
     if (shift<=0)
@@ -239,14 +239,14 @@ static inline int32_t roundNearest(int32_t a)
 
     //round to nearest, ties to positive infinity
     asm(".syntax unified\n\t"
-        "lsrs    %[a], %[a], %[shift]\n\t"
+        "asrs    %[a], %[a], %[shift]\n\t"
         "adcs    %[a], %[a], %[zero]"
     :[a]"+&r"(a)//output
     :[shift]"rI"(shift), [zero]"r"(0)//inputs
     :"cc" //clobber
     );
     //note:
-    //lsrs sets the carry flag based on the last digit
+    //asrs sets the carry flag based on the last digit
     //that was shifted out
     //"rI" means the compiler
     //can choose between immediate value and register

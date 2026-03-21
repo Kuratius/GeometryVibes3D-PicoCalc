@@ -241,19 +241,19 @@ static inline int32_t roundNearest(int32_t a)
     asm(".syntax unified\n\t"
         "asrs    %[a], %[a], %[shift]\n\t"
         "adcs    %[a], %[a], %[zero]"
-    :[a]"+&r"(a)//output
-    :[shift]"rI"(shift), [zero]"r"(0)//inputs
+    :[a]"+&l"(a)//output
+    :[shift]"lI"(shift), [zero]"l"(0)//inputs
     :"cc" //clobber
     );
     //note:
     //asrs sets the carry flag based on the last digit
     //that was shifted out
-    //"rI" means the compiler
-    //can choose between immediate value and register
+    //"lI" means the compiler
+    //can choose between immediate value and  a low register (r0-r7)
     //adc on thumb does not support an immediate value
-    //hence the "r" constraint instead of I
-    //+r means the register is both input and output
-    //& prevents input regs from overlapping with it
+    //hence the "l" constraint instead of I
+    //+l means the register is both input and output
+    //+&l prevents input regs from overlapping with it
     //(important for multi-line statements)
     return a;
 }

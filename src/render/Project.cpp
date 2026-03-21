@@ -225,6 +225,38 @@ void buildCameraBasis(Camera& cam) {
     cam.right = cross3_normal(cam.fwd, cam.up);
     cam.up2   = cross3_normal(cam.right, cam.fwd);
 }
+static inline int32_t roundNearest(int32_t a)
+{
+    const int shift=16;
+    //asrs doesnt update carry flag for shift by 0
+    //this branch should get pruned, but it is important
+    //if you want to reuse this code elsewhere
+    if (shift<=0)
+        return a;
+    //compiler can't run assembly code
+    if (__builtin_constant_p(a))
+        return (int32_t)(((int64_t)a+(1<<(shift-1)))>>shift);
+
+    //round to nearest, ties to positive infinity
+    asm(".syntax unified\n\t"
+        "asrs    %[a], %[a], %[shift]\n\t"
+        "adcs    %[a], %[a], %[zero]"
+    :[a]"+&l"(a)//output
+    :[shift]"lI"(shift), [zero]"l"(0)//inputs
+    :"cc" //clobber
+    );
+    //note:
+    //asrs sets the carry flag based on the last digit
+    //that was shifted out
+    //"lI" means the compiler
+    //can choose between immediate value and  a low register (r0-r7)
+    //adc on thumb does not support an immediate value
+    //hence the "l" constraint instead of I
+    //+l means the register is both input and output
+    //+&l prevents input regs from overlapping with it
+    //(important for multi-line statements)
+    return a;
+}
 
 bool projectPoint(const Camera& cam, const Vec3fx& world, Vec2i& out) {
     // Transform world -> view using precomputed basis
@@ -239,8 +271,9 @@ bool projectPoint(const Camera& cam, const Vec3fx& world, Vec2i& out) {
     fx sx = cam.cx + x * invz;
     fx sy = cam.cy - y * invz;
 
-    out.x = (int16_t)sx.toInt();
-    out.y = (int16_t)sy.toInt();
+
+    out.x = (int16_t)roundNearest(sx.raw());
+    out.y = (int16_t)roundNearest(sy.raw());
     return true;
 }
 

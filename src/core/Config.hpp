@@ -3,6 +3,12 @@
 
 namespace gv {
 
+// ---- App paths ----
+#define GV_APP_ROOT "/GV3D"
+#define GV_LEVELS_DIR GV_APP_ROOT "/levels"
+#define GV_SAVES_DIR  GV_APP_ROOT "/saves"
+#define GV_ASSETS_DIR GV_APP_ROOT "/assets"
+
 // ---- Core grid ----
 constexpr int kCellSize = 12;
 constexpr int kLevelHeight = 9; // keep this aligned with the on-disk format (GVL1).

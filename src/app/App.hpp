@@ -109,16 +109,16 @@ private:
 
 private:
     static constexpr LevelEntry kLevels[] = {
-        { "Level 1 ", "levels/L01.BIN" },
-        { "Level 2 ", "levels/L02.BIN" },
-        { "Level 3 ", "levels/L03.BIN" },
-        { "Level 4 ", "levels/L04.BIN" },
-        { "Level 5 ", "levels/L05.BIN" },
-        { "Level 6 ", "levels/L06.BIN" },
-        { "Level 7 ", "levels/L07.BIN" },
-        { "Level 8 ", "levels/L08.BIN" },
-        { "Level 9 ", "levels/L09.BIN" },
-        { "Level 10", "levels/L10.BIN" }
+        { "Level 1 ", GV_LEVELS_DIR "/L01.BIN" },
+        { "Level 2 ", GV_LEVELS_DIR "/L02.BIN" },
+        { "Level 3 ", GV_LEVELS_DIR "/L03.BIN" },
+        { "Level 4 ", GV_LEVELS_DIR "/L04.BIN" },
+        { "Level 5 ", GV_LEVELS_DIR "/L05.BIN" },
+        { "Level 6 ", GV_LEVELS_DIR "/L06.BIN" },
+        { "Level 7 ", GV_LEVELS_DIR "/L07.BIN" },
+        { "Level 8 ", GV_LEVELS_DIR "/L08.BIN" },
+        { "Level 9 ", GV_LEVELS_DIR "/L09.BIN" },
+        { "Level 10", GV_LEVELS_DIR "/L10.BIN" }
     };
     static constexpr std::size_t kLevelCount = sizeof(kLevels) / sizeof(kLevels[0]);
 

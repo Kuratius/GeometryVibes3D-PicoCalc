@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/StaticVector.hpp"
+#include "core/Config.hpp"
 #include "platform/IFileSystem.hpp"
 #include "game/Difficulty.hpp"
 #include <cstddef>
@@ -91,7 +92,7 @@ private:
     static constexpr char kMagic1 = 'V';
     static constexpr char kMagic2 = 'S';
     static constexpr uint8_t kVersion = 2;
-    static constexpr const char* kSavePath = "saves/gv3d.sav";
+    static constexpr const char* kSavePath = GV_SAVES_DIR "/gv3d.sav";
 
 private:
     StaticVector<SaveEntry, kMaxEntries> entries_{};

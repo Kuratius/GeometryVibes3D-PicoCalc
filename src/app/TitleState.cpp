@@ -2,6 +2,7 @@
 #include "App.hpp"
 #include "render/RenderList.hpp"
 #include "render/Colors.hpp"
+#include "core/Config.hpp"
 
 namespace gv {
 
@@ -115,7 +116,7 @@ void TitleState::drawPlaceholderPattern(IDisplay& display) {
 }
 
 void TitleState::onEnter(App& app) {
-    if (!loadTitleAsset(app.platform().fs(), "assets/title.rgb565")) {
+    if (!loadTitleAsset(app.platform().fs(), GV_ASSETS_DIR "/title.rgb565")) {
         app.statusOverlay().addWarning("title.rgb565 missing");
         app.statusOverlay().addInfo("Using placeholder pattern");
     }

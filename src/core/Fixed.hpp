@@ -33,8 +33,8 @@ struct fx {
     constexpr int32_t raw() const { return v; }
     constexpr int32_t toInt() const { return v >> SHIFT; }
 
-    // Truncate toward 0 (same as toInt for typical 2's complement)
-    constexpr int32_t trunc() const { return v >> SHIFT; }
+    // Truncate toward 0
+    constexpr int32_t trunc() const { return (v >= 0) ? (v >> SHIFT) : -((-v) >> SHIFT); }
 
     // Round to nearest int32 (ties away from 0)
     constexpr int32_t roundToInt() const {

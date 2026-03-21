@@ -2,6 +2,7 @@
 #include "App.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
+#include "render/Colors.hpp"
 #include <cstdio>
 
 namespace gv {
@@ -62,13 +63,10 @@ void OptionsState::update(App& app, const InputState& in, uint32_t dtUs) {
 }
 
 void OptionsState::render(App& app, IDisplay& display, RenderList& rl) {
-    static constexpr uint16_t kWhite = 0xFFFF;
-    static constexpr uint16_t kGray  = 0x8410;
-
     rl.clear();
 
     const int w = app.displayWidth();
-    rl.addText(&title_, (int16_t)((w - title_.width()) / 2), 12, kWhite);
+    rl.addText(&title_, (int16_t)((w - title_.width()) / 2), 12, gv::color::White);
 
     const int startY = 48;
     const int stepY = 14;
@@ -79,13 +77,13 @@ void OptionsState::render(App& app, IDisplay& display, RenderList& rl) {
             &items_[i],
             (int16_t)itemX,
             (int16_t)(startY + int(i) * stepY),
-            kWhite,
+            gv::color::White,
             255,
             i == selected_
         );
     }
 
-    rl.addText(&help_, 16, 180, kGray);
+    rl.addText(&help_, 16, 180, gv::color::Gray);
 
     StatusOverlayView::appendTo(
         rl,

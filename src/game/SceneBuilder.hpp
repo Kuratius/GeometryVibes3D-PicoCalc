@@ -5,6 +5,7 @@
 #include "render/Project.hpp"
 #include "Level.hpp"
 #include "core/Config.hpp"
+#include "render/Colors.hpp"
 
 namespace gv {
 
@@ -107,7 +108,7 @@ private:
 
     void addText(RenderList& rl, const Text& text, int16_t x, int16_t y,
                  uint16_t color, uint8_t alpha = 255, bool inverted = false,
-                 uint16_t bgColor565 = 0x0000,
+                 uint16_t bgColor565 = gv::color::Black,
                  uint8_t styleFlags = TextStyle::None) const;
 
     void drawExplosion(RenderList& rl, const Camera& cam,

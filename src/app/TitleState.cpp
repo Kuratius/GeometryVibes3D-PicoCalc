@@ -1,6 +1,7 @@
 #include "TitleState.hpp"
 #include "App.hpp"
 #include "render/RenderList.hpp"
+#include "render/Colors.hpp"
 
 namespace gv {
 
@@ -103,7 +104,7 @@ void TitleState::drawPlaceholderPattern(IDisplay& display) {
             uint16_t* dst = s_titleSlab + row * kAssetW;
             for (int x = 0; x < kAssetW; ++x) {
                 const bool checker = (((x >> 4) ^ ((y + row) >> 4)) & 1) != 0;
-                dst[x] = checker ? 0xFFFF : 0x001F;
+                dst[x] = checker ? gv::color::White : gv::color::Blue;
             }
         }
 
@@ -209,7 +210,7 @@ void TitleState::render(App& app, IDisplay& display, RenderList& rl) {
         return;
     }
 
-    const uint16_t fg = 0xFFFF;
+    const uint16_t fg = gv::color::White;
     for (int row = 0; row < promptH; ++row) {
         uint16_t* dstRow = s_titleSlab + row * kAssetW;
         for (int col = 0; col < promptW; ++col) {

@@ -770,13 +770,6 @@ bool Game::checkCollisionAt(fx shipY) {
                     continue;
                 }
 
-                if (c < staticColA || c > staticColB) {
-                    continue;
-                }
-                if (row < staticRowA || row > staticRowB) {
-                    continue;
-                }
-
                 fx centerX = worldXForColumn(c, xScroll_) + halfCellFx();
                 fx centerY = worldYForRow(row) + halfCellFx();
                 applyOffsetToAnchor(col.offsetMod(row), centerX, centerY);

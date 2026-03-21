@@ -2,6 +2,7 @@
 #include "StatusOverlay.hpp"
 #include "render/RenderList.hpp"
 #include "render/Text.hpp"
+#include "render/Colors.hpp"
 #include <cstring>
 
 namespace gv {
@@ -15,7 +16,7 @@ void appendTo(RenderList& rl,
 {
     if (!overlay.visible()) return;
 
-    static constexpr uint16_t kFooter = 0x8410; // gray
+    static constexpr uint16_t kFooter = gv::color::Gray;
     static constexpr int kLineStep = 10;
     static constexpr int kPanelX = 8;
     static constexpr int kBottomMargin = 8;

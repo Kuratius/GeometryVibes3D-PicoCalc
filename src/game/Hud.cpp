@@ -1,4 +1,5 @@
 #include "Hud.hpp"
+#include "render/Colors.hpp"
 #include <cstddef>
 
 namespace gv {
@@ -160,12 +161,12 @@ uint16_t Hud::eventColor() const {
     if (!eventVisible_) return 0;
 
     if (eventAge_ <= kEventHold) {
-        return 0xFFFF;
+        return gv::color::White;
     }
 
     const fx fadeAge = eventAge_ - kEventHold;
     if (fadeAge >= kEventFade) {
-        return 0;
+        return gv::color::Black;
     }
 
     const fx brightness = fx::one() - (fadeAge / kEventFade);

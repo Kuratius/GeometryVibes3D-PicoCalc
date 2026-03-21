@@ -2,6 +2,7 @@
 #include "App.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
+#include "render/Colors.hpp"
 
 namespace gv {
 
@@ -75,20 +76,17 @@ void NewGameState::update(App& app, const InputState& in, uint32_t dtUs) {
 }
 
 void NewGameState::render(App& app, IDisplay& display, RenderList& rl) {
-    static constexpr uint16_t kWhite = 0xFFFF;
-    static constexpr uint16_t kGray  = 0x8410;
-
     rl.clear();
 
     const int w = app.displayWidth();
 
-    rl.addText(&title_, (int16_t)((w - title_.width()) / 2), 12, kWhite);
-    rl.addText(&prompt_, 16, 48, kWhite);
-    rl.addText(&nameText_, 16, 64, kWhite, 255, true);
+    rl.addText(&title_, (int16_t)((w - title_.width()) / 2), 12, gv::color::White);
+    rl.addText(&prompt_, 16, 48, gv::color::White);
+    rl.addText(&nameText_, 16, 64, gv::color::White, 255, true);
 
-    rl.addText(&help1_, 16, 96, kGray);
-    rl.addText(&help2_, 16, 108, kGray);
-    rl.addText(&help3_, 16, 120, kGray);
+    rl.addText(&help1_, 16, 96, gv::color::Gray);
+    rl.addText(&help2_, 16, 108, gv::color::Gray);
+    rl.addText(&help3_, 16, 120, gv::color::Gray);
 
     StatusOverlayView::appendTo(
         rl,

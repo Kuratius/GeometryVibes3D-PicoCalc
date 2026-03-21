@@ -2,6 +2,7 @@
 #include "App.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
+#include "render/Colors.hpp"
 #include <cstdio>
 
 namespace gv {
@@ -59,12 +60,9 @@ void LevelSelectState::rebuildTexts(App& app) {
 }
 
 void LevelSelectState::buildMenu(App& app, RenderList& rl) const {
-    static constexpr uint16_t kWhite = 0xFFFF;
-    static constexpr uint16_t kGray  = 0x8410;
-
     const int w = app.displayWidth();
     const int titleX = (w - menuTitle_.width()) / 2;
-    rl.addText(&menuTitle_, (int16_t)titleX, 12, kWhite);
+    rl.addText(&menuTitle_, (int16_t)titleX, 12, gv::color::White);
 
     const int startY = 40;
     const int lineStep = 12;
@@ -78,7 +76,7 @@ void LevelSelectState::buildMenu(App& app, RenderList& rl) const {
             &difficultyTexts_[i],
             (int16_t)diffX,
             (int16_t)(startY + int(i) * lineStep),
-            kWhite,
+            gv::color::White,
             255,
             selected
     );
@@ -89,7 +87,7 @@ void LevelSelectState::buildMenu(App& app, RenderList& rl) const {
         const bool selected = unlocked &&
                               (i == selectedLevel_) &&
                               (focus_ == FocusPane::Levels);
-        const uint16_t color = unlocked ? kWhite : kGray;
+        const uint16_t color = unlocked ? gv::color::White : gv::color::Gray;
 
         rl.addText(
             &levelTexts_[i],
@@ -101,7 +99,7 @@ void LevelSelectState::buildMenu(App& app, RenderList& rl) const {
         );
     }
 
-    rl.addText(&help_, 16, 180, kGray);
+    rl.addText(&help_, 16, 180, gv::color::Gray);
 }
 
 void LevelSelectState::update(App& app, const InputState& in, uint32_t dtUs) {

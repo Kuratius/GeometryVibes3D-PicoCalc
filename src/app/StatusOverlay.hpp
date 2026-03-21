@@ -2,13 +2,14 @@
 
 #include "render/Text.hpp"
 #include "core/StaticVector.hpp"
+#include "render/Colors.hpp"
 #include <cstdint>
 
 namespace gv {
 
 struct OverlayLine {
     Text text{};
-    uint16_t color565 = 0xFFFF;
+    uint16_t color565 = gv::color::White;
 };
 
 class StatusOverlay {
@@ -18,12 +19,12 @@ public:
 public:
     void clear();
 
-    bool addMessage(const char* s, uint16_t color565 = 0xFFFF);
+    bool addMessage(const char* s, uint16_t color565 = gv::color::White);
     bool addInfo(const char* s);
     bool addWarning(const char* s);
     bool addError(const char* s);
 
-    void setFooterRight(const char* s, uint16_t color565 = 0xFFFF);
+    void setFooterRight(const char* s, uint16_t color565 = gv::color::White);
     void clearFooterRight();
 
     void show() { visible_ = true; }
@@ -42,7 +43,7 @@ public:
 private:
     gv::StaticVector<OverlayLine, LINE_CAP> lines_{};
     Text footerRightText_{};
-    uint16_t footerRightColor565_ = 0xFFFF;
+    uint16_t footerRightColor565_ = gv::color::White; 
     bool hasFooterRight_ = false;
     bool visible_ = false;
 };

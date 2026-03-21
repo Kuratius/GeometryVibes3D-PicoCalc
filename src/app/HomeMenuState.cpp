@@ -2,6 +2,7 @@
 #include "App.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
+#include "render/Colors.hpp"
 
 namespace gv {
 
@@ -84,14 +85,11 @@ void HomeMenuState::update(App& app, const InputState& in, uint32_t dtUs) {
 }
 
 void HomeMenuState::render(App& app, IDisplay& display, RenderList& rl) {
-    static constexpr uint16_t kWhite = 0xFFFF;
-    static constexpr uint16_t kGray  = 0x8410;
-
     rl.clear();
 
     const int w = app.displayWidth();
     const int titleX = (w - title_.width()) / 2;
-    rl.addText(&title_, (int16_t)titleX, 12, kWhite);
+    rl.addText(&title_, (int16_t)titleX, 12, gv::color::White );
 
     const int startY = 52;
     const int stepY = 14;
@@ -104,7 +102,7 @@ void HomeMenuState::render(App& app, IDisplay& display, RenderList& rl) {
             &items_[i],
             (int16_t)itemX,
             (int16_t)(startY + int(i) * stepY),
-            enabled ? kWhite : kGray,
+            enabled ? gv::color::White : gv::color::Gray,
             255,
             selected
         );

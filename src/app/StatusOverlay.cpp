@@ -1,11 +1,12 @@
 #include "StatusOverlay.hpp"
+#include "render/Colors.hpp"
 
 namespace gv {
 
 void StatusOverlay::clear() {
     lines_.clear();
     footerRightText_.clear();
-    footerRightColor565_ = 0xFFFF;
+    footerRightColor565_ = gv::color::White;
     hasFooterRight_ = false;
 }
 
@@ -40,15 +41,15 @@ bool StatusOverlay::addMessage(const char* s, uint16_t color565) {
 }
 
 bool StatusOverlay::addInfo(const char* s) {
-    return addMessage(s, 0xFFFF);
+    return addMessage(s, gv::color::White);
 }
 
 bool StatusOverlay::addWarning(const char* s) {
-    return addMessage(s, 0xFFE0);
+    return addMessage(s, gv::color::Yellow);
 }
 
 bool StatusOverlay::addError(const char* s) {
-    return addMessage(s, 0xF800);
+    return addMessage(s, gv::color::Red);
 }
 
 void StatusOverlay::setFooterRight(const char* s, uint16_t color565) {
@@ -65,7 +66,7 @@ void StatusOverlay::setFooterRight(const char* s, uint16_t color565) {
 
 void StatusOverlay::clearFooterRight() {
     footerRightText_.clear();
-    footerRightColor565_ = 0xFFFF;
+    footerRightColor565_ = gv::color::White;
     hasFooterRight_ = false;
 }
 

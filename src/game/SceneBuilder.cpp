@@ -611,7 +611,7 @@ void SceneBuilder::buildScene(RenderList& rl,
     if (!game.hasLevel()) return;
 
     const LevelHeader& hdr = game.levelHeader();
-    const uint16_t obstacleColor = (hdr.obstacleColor565 != 0) ? hdr.obstacleColor565 : uint16_t(0x07E0);
+    const uint16_t obstacleColor = (hdr.obstacleColor565 != 0) ? hdr.obstacleColor565 : gv::color::Green;
     const uint16_t bgColor = hdr.backgroundColor565;
 
     const int levelW = int(hdr.width);
@@ -791,7 +791,7 @@ void SceneBuilder::buildScene(RenderList& rl,
             if (row > (kLevelHeight - 1)) row = (kLevelHeight - 1);
 
             const fx pyWorld = worldYForRow(row);
-            addCube(rl, cam, {px, pyWorld, cz}, gv::color::Purple);
+            addCube(rl, cam, {px, pyWorld, cz}, gv::color::Magenta);
         }
         drawPortalRays(rl, cam, game, scrollX, portalRays, kWire);
     }

@@ -2,6 +2,7 @@
 
 #include "Text.hpp"
 #include "core/StaticVector.hpp"
+#include "render/Colors.hpp"
 #include <cstddef>
 #include <cstdint>
 
@@ -30,8 +31,8 @@ struct TextInst {
     const Text* text = nullptr;
     int16_t x = 0;
     int16_t y = 0;
-    uint16_t color565 = 0xFFFF;
-    uint16_t bgColor565 = 0x0000;
+    uint16_t color565 = gv::color::White;
+    uint16_t bgColor565 = gv::color::Black;
     uint8_t alpha = 255;
     uint8_t styleFlags = TextStyle::None;
 };
@@ -82,7 +83,7 @@ struct RenderList {
                  uint16_t color565,
                  uint8_t alpha = 255,
                  bool inverted = false,
-                 uint16_t bgColor565 = 0x0000,
+                 uint16_t bgColor565 = gv::color::Black,
                  uint8_t styleFlags = TextStyle::None)
     {
         if (!text) return false;
@@ -91,7 +92,7 @@ struct RenderList {
             styleFlags |= TextStyle::Inverted;
         }
 
-        if (bgColor565 != 0x0000) {
+        if (bgColor565 != gv::color::Black) {
             styleFlags |= TextStyle::Background;
         }
 

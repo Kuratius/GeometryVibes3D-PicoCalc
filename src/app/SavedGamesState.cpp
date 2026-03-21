@@ -2,6 +2,7 @@
 #include "App.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlayView.hpp"
+#include "render/Colors.hpp"
 
 namespace gv {
 
@@ -88,13 +89,10 @@ void SavedGamesState::update(App& app, const InputState& in, uint32_t dtUs) {
 }
 
 void SavedGamesState::render(App& app, IDisplay& display, RenderList& rl) {
-    static constexpr uint16_t kWhite = 0xFFFF;
-    static constexpr uint16_t kGray  = 0x8410;
-
     rl.clear();
 
     const int w = app.displayWidth();
-    rl.addText(&title_, (int16_t)((w - title_.width()) / 2), 12, kWhite);
+    rl.addText(&title_, (int16_t)((w - title_.width()) / 2), 12, gv::color::White);
 
     const int startY = 40;
     const int stepY = 12;
@@ -105,17 +103,17 @@ void SavedGamesState::render(App& app, IDisplay& display, RenderList& rl) {
             &saveTexts_[i],
             (int16_t)itemX,
             (int16_t)(startY + int(i) * stepY),
-            kWhite,
+            gv::color::White,
             255,
             i == selected_
         );
     }
 
     if (confirmDelete_) {
-        rl.addText(&confirm1_, 16, 180, 0xFFE0);
-        rl.addText(&confirm2_, 16, 192, kGray);
+        rl.addText(&confirm1_, 16, 180, gv::color::Yellow);
+        rl.addText(&confirm2_, 16, 192, gv::color::Gray);
     } else {
-        rl.addText(&help_, 16, 180, kGray);
+        rl.addText(&help_, 16, 180, gv::color::Gray);
     }
 
     StatusOverlayView::appendTo(

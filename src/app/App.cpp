@@ -1,5 +1,6 @@
 #include "App.hpp"
 #include "platform/Keys.hpp"
+#include "render/Colors.hpp"
 #include <cstdio>
 
 namespace gv {
@@ -37,11 +38,11 @@ void updateBatteryFooter(StatusOverlay& overlay,
     cache.charging = charging;
     cache.valid = true;
 
-    uint16_t color = 0x07E0; // green
+    uint16_t color = gv::color::Green;
     if (level < 10) {
-        color = 0xF800; // red
+        color = gv::color::Red;
     } else if (level < 30) {
-        color = 0xFFE0; // yellow
+        color = gv::color::Yellow;
     }
 
     char buf[32];

@@ -11,14 +11,18 @@ namespace gv {
 // Set to 0 to use the original divide-by-length normalization.
 #define GV_FAST_NORMALIZE 1
 
-// ---- small fixed helpers (local) ----
+// ---- small fixed-point helpers (local) ----
 static inline Vec3fx sub3(const Vec3fx& a, const Vec3fx& b) {
     return Vec3fx{ a.x - b.x, a.y - b.y, a.z - b.z };
 }
 
 #if GV_FAST_NORMALIZE
 
-static uint32_t sqrt_core(uint32_t xyy, uint32_t y) {
+// Refines a scaled sqrt/rsqrt-style estimate using shift/add multiplicative updates.
+// Invariant: accepted updates multiply `y` by (1 + 2^-i) and `xyy` by roughly (1 + 2^-i)^2,
+// preserving the normalized relationship needed for the final correction step.
+// The return value is a scaled estimate used by normalize32(); see sqrt64Helper() for setup.
+static uint32_t sqrtCore(uint32_t xyy, uint32_t y) {
     //this can be reused for a sqrt instead of rsqrt
     //by setting y to the correct value
     xyy >>= 1;
@@ -44,7 +48,7 @@ static uint32_t sqrt_core(uint32_t xyy, uint32_t y) {
         }
     }
     //the following steps perform a hidden newton iteration
-    //the calculation above guarantees x wont have bit 31 set
+    //the calculation above guarantees xyy wont have bit 31 set
     //so we only need to shift down by 15
     y >>= 16;
     uint32_t hi = (xyy >> 15) * y;
@@ -57,19 +61,24 @@ static uint32_t sqrt_core(uint32_t xyy, uint32_t y) {
     return (y - (hi >> 1)); //but then this underflows so they cancel
 }
 
-static inline uint32_t sqrt64_helper(uint64_t m, int* exp) {
+
+// Normalize a nonzero 64-bit magnitude for sqrtCore().
+// The input is shifted so its top set bit lands on an even exponent near bit 30,
+// which keeps the square-root scaling exact under exponent halving.
+// `*exp` receives the exponent adjustment needed to rescale the returned value
+// back to the original magnitude domain.
+static inline uint32_t sqrt64Helper(uint64_t m, int* exp) {
     int clz = __builtin_clzll(m);
     int ilog2 = 63 - clz;
-    ilog2 >>= 1;
-    ilog2 <<= 1;
+    ilog2 &= ~1; // round down to even
     int shift = 30 - ilog2;
     m = (shift >= 0) ? (m << shift) : (m >> -shift);
     int shift2 = 30 - (shift >> 1);
     *exp = shift2;
-    return sqrt_core((uint32_t)m, 1u << 30);
+    return sqrtCore((uint32_t)m, 1u << 30);
 }
 
-static void normalize_32(int32_t* a) {
+static void normalize32(int32_t* a) {
     uint64_t squared_magnitude = 0;
     for (int i = 0; i < 3; i++) {
         uint32_t abs = (a[i] >= 0) ? (uint32_t)a[i] : (uint32_t)-a[i];
@@ -83,7 +92,7 @@ static void normalize_32(int32_t* a) {
         return;
 
     int exp = 0;
-    uint32_t res = sqrt64_helper(squared_magnitude, &exp) >> 16;
+    uint32_t res = sqrt64Helper(squared_magnitude, &exp) >> 16;
     exp += -16;
 
     for (int i = 0; i < 3; i++) {
@@ -105,7 +114,7 @@ static void normalize_32(int32_t* a) {
 
 static inline Vec3fx normalize3(const Vec3fx& v) {
     int32_t a[3] = { v.x.raw(), v.y.raw(), v.z.raw() };
-    normalize_32(&a[0]);
+    normalize32(a);
 
     Vec3fx out;
     out.x = fx::fromRaw(a[0]);
@@ -177,12 +186,15 @@ static inline Vec3fx normalize3(const Vec3fx& v) {
 
 #endif
 
+// Preserve 4 extra bits from `normalVector` versus the old path.
+// Old behavior: `tb = normalVector[i] >> 8;` and `return sum;`
+// New behavior: `tb = normalVector[i] >> 4;` and `return sum >> 4;`
+// Net scale stays the same, but the multiply keeps more normal-vector precision.
 static int32_t projectToNormal(const int32_t* a, const int32_t* normalVector) {
     int32_t sum = 0;
     for (int i = 0; i < 3; i++) {
         int32_t ta = a[i] >> 8;
         int32_t tb = normalVector[i] >> 4;
-        //workaround until I figure out a better way
         sum += ta * tb;
     }
     return sum>>4;
@@ -195,7 +207,7 @@ static inline fx projectNormal3(const Vec3fx& v1, const Vec3fx& v2) {
     return fx::fromRaw(projectToNormal(&a[0], &b[0]));
 }
 
-static void normal_cross(const int32_t* a, const int32_t* b, int32_t* resultVector) {
+static void normalCross(const int32_t* a, const int32_t* b, int32_t* resultVector) {
     int32_t ta[3] = { a[0] >> 1, a[1] >> 1, a[2] >> 1 };
     int32_t tb[3] = { b[0] >> 1, b[1] >> 1, b[2] >> 1 };
     //the above is just so we dont need the restrict qualifier
@@ -205,11 +217,11 @@ static void normal_cross(const int32_t* a, const int32_t* b, int32_t* resultVect
     resultVector[2] = ((int32_t)ta[0] * tb[1] - (int32_t)ta[1] * tb[0]) >> 14;
 }
 
-static inline Vec3fx cross3_normal(const Vec3fx& v1, const Vec3fx& v2) {
+static inline Vec3fx cross3Normal(const Vec3fx& v1, const Vec3fx& v2) {
     int32_t a[3] = { v1.x.raw(), v1.y.raw(), v1.z.raw() };
     int32_t b[3] = { v2.x.raw(), v2.y.raw(), v2.z.raw() };
     int32_t result[3];
-    normal_cross(&a[0], &b[0], &result[0]);
+    normalCross(&a[0], &b[0], &result[0]);
 
     Vec3fx out;
     out.x = fx::fromRaw(result[0]);
@@ -221,10 +233,11 @@ static inline Vec3fx cross3_normal(const Vec3fx& v1, const Vec3fx& v2) {
 void buildCameraBasis(Camera& cam) {
     Vec3fx tgt = cam.target;
     cam.fwd   = normalize3(sub3(tgt, cam.pos));
-    //cam.up    = normalize3(cam.up); //this probably isnt necessary?
-    cam.right = cross3_normal(cam.fwd, cam.up);
-    cam.up2   = cross3_normal(cam.right, cam.fwd);
+    //cam.up    = normalize3(cam.up); // Assume cam.up is already normalized.
+    cam.right = cross3Normal(cam.fwd, cam.up);
+    cam.up2   = cross3Normal(cam.right, cam.fwd);
 }
+
 static inline int32_t roundNearest(int32_t a)
 {
     const int shift=16;

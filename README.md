@@ -2,7 +2,7 @@
 
 A faithful RP2040 port of **Geometry Vibes 3D**, targeting the **ClockworkPi PicoCalc**.
 
-Current state: playable wireframe “fake 3D” implementation with a state-driven app flow, persistent save data, collectible level stars, animated obstacle groups with rotation and scaling, gameplay-plane collision against static and animated geometry, and stable fixed-rate rendering on the ILI9488.
+Current state: playable wireframe “fake 3D” implementation with a state-driven app flow, persistent save data, selectable gameplay difficulty, collectible level stars, animated obstacle groups with rotation and scaling, gameplay-plane collision against static and animated geometry, and stable fixed-rate rendering on the ILI9488.
 
 ## Features
 
@@ -15,6 +15,13 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
   - level select
   - gameplay
   - options
+- **Difficulty selection**
+  - selectable gameplay difficulty
+  - current presets:
+    - Rookie
+    - Pro
+    - Expert
+  - difficulty affects scroll speed and fly-out speed at runtime
 - **Persistent save system**
   - up to **10 saved games**
   - compact binary save file stored on SD card
@@ -46,7 +53,7 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
   - collectible stars
 - **Gameplay-plane collision model**
   - 2D primitive overlap for static and animated obstacles
-  - rectangle-based collectible-star pickup checks
+  - collectible stars handled directly from streamed level data
   - more accurate ship collision than the earlier sphere-style approximation
 - **Wireframe effects**, including:
   - animated portal rays
@@ -66,6 +73,18 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
   - enable serial renderer stats output
   - collision-highlight overlay
 
+## Runtime filesystem layout
+
+Runtime data is organized under a dedicated **`/GV3D`** root directory on the SD card.
+
+Current subdirectories include:
+
+- `/GV3D/levels`
+- `/GV3D/saves`
+- `/GV3D/assets`
+
+This keeps level data, save data, and runtime assets grouped under a single app-specific root.
+
 ## Hardware / platform highlights
 
 - **ILI9488 320×320 display**
@@ -74,8 +93,8 @@ Current state: playable wireframe “fake 3D” implementation with a state-driv
   - screen-space text + fill-rect overlay primitives
   - stable **~30 FPS** pacing
 - **SD card + FAT32**
-  - streams `levels/*.BIN` columns on demand
-  - loads and saves persistent game data
+  - streams level columns on demand from `/GV3D/levels`
+  - loads and saves persistent game data under `/GV3D`
   - no full level load into RAM
 - **PicoCalc keyboard**
   - polled through the platform/input layer

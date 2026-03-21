@@ -253,7 +253,7 @@ static inline int32_t roundNearest(int32_t a)
     //adc on thumb does not support an immediate value
     //hence the "r" constraint instead of I
     //+r means the register is both input and output
-    //& prevents input regs from from overlapping with it
+    //& prevents input regs from overlapping with it
     //(important for multi-line statements)
     return a;
 }

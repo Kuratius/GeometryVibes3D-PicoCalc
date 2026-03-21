@@ -2,6 +2,7 @@
 
 #include "platform/IPlatform.hpp"
 #include "game/Game.hpp"
+#include "game/Difficulty.hpp"
 #include "render/RenderList.hpp"
 #include "StatusOverlay.hpp"
 #include "IAppState.hpp"
@@ -60,6 +61,9 @@ public:
             selectedLevel_ = i;
         }
     }
+
+    Difficulty selectedDifficulty() const { return selectedDifficulty_; }
+    void setSelectedDifficulty(Difficulty difficulty);
 
     bool hasAnySave() const { return saveData_.entryCount() > 0; }
     bool hasMultipleSaves() const { return saveData_.entryCount() > 1; }
@@ -133,6 +137,7 @@ private:
     std::size_t selectedLevel_ = 0;
     std::size_t unlockedLevelCount_ = 1;
     uint8_t activeSaveIndex_ = SaveData::kNoSelection;
+    Difficulty selectedDifficulty_ = Difficulty::Rookie;
     
     // Per-frame render scratch
     RenderList frame_{};

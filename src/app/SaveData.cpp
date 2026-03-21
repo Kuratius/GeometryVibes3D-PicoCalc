@@ -17,7 +17,18 @@ static uint8_t clampUnlockedCount(uint8_t v) {
     return v;
 }
 
+struct LegacySaveEntryV1 {
+    char name[SaveData::kNameBytes]{};
+    uint8_t unlockedCount = 1;
+    uint8_t percentComplete[SaveData::kLevelCount]{};
+    uint8_t stars[SaveData::kLevelCount]{};
+};
+
 } // namespace
+
+uint8_t SaveData::clampDifficultyIndex(uint8_t value) {
+    return (value < kDifficultyCount) ? value : uint8_t(Difficulty::Rookie);
+}
 
 const SaveData::SaveEntry* SaveData::entryAt(std::size_t i) const {
     return (i < entries_.size()) ? &entries_[i] : nullptr;
@@ -25,6 +36,18 @@ const SaveData::SaveEntry* SaveData::entryAt(std::size_t i) const {
 
 SaveData::SaveEntry* SaveData::entryAt(std::size_t i) {
     return (i < entries_.size()) ? &entries_[i] : nullptr;
+}
+
+const SaveData::DifficultyProgress* SaveData::progressAt(std::size_t index, Difficulty difficulty) const {
+    const SaveEntry* e = entryAt(index);
+    if (!e) return nullptr;
+    return &e->progress[difficultyIndex(difficulty)];
+}
+
+SaveData::DifficultyProgress* SaveData::progressAt(std::size_t index, Difficulty difficulty) {
+    SaveEntry* e = entryAt(index);
+    if (!e) return nullptr;
+    return &e->progress[difficultyIndex(difficulty)];
 }
 
 void SaveData::clear() {
@@ -51,11 +74,16 @@ void SaveData::normalizeName(char (&dst)[kNameBytes], const char* src) {
 
 void SaveData::sanitizeEntry(SaveEntry& e) {
     e.name[kNameBytes - 1] = '\0';
-    e.unlockedCount = clampUnlockedCount(e.unlockedCount);
+    e.selectedDifficulty = clampDifficultyIndex(e.selectedDifficulty);
 
-    for (std::size_t i = 0; i < kLevelCount; ++i) {
-        e.percentComplete[i] = clampPercent(e.percentComplete[i]);
-        e.stars[i] = uint8_t(e.stars[i] & 0x07u);
+    for (std::size_t d = 0; d < kDifficultyCount; ++d) {
+        DifficultyProgress& p = e.progress[d];
+        p.unlockedCount = clampUnlockedCount(p.unlockedCount);
+
+        for (std::size_t i = 0; i < kLevelCount; ++i) {
+            p.percentComplete[i] = clampPercent(p.percentComplete[i]);
+            p.stars[i] = uint8_t(p.stars[i] & 0x07u);
+        }
     }
 }
 
@@ -63,7 +91,7 @@ bool SaveData::load(IFileSystem& fs) {
     clear();
 
     if (!fs.exists(kSavePath)) {
-        return true; // no save file yet is not an error
+        return true;
     }
 
     IFile* f = fs.openRead(kSavePath);
@@ -87,7 +115,7 @@ bool SaveData::load(IFileSystem& fs) {
         }
     }
 
-    if (ok && hdr.version != kVersion) {
+    if (ok && hdr.version != 1 && hdr.version != kVersion) {
         ok = false;
     }
 
@@ -97,10 +125,32 @@ bool SaveData::load(IFileSystem& fs) {
 
     for (std::size_t i = 0; ok && i < count; ++i) {
         SaveEntry e{};
-        got = 0;
-        if (!f->read(&e, sizeof(e), got) || got != sizeof(e)) {
-            ok = false;
-            break;
+
+        if (hdr.version == 1) {
+            LegacySaveEntryV1 old{};
+            got = 0;
+            if (!f->read(&old, sizeof(old), got) || got != sizeof(old)) {
+                ok = false;
+                break;
+            }
+
+            normalizeName(e.name, old.name);
+            e.selectedDifficulty = uint8_t(Difficulty::Rookie);
+            e.progress[difficultyIndex(Difficulty::Rookie)].unlockedCount =
+                clampUnlockedCount(old.unlockedCount);
+
+            for (std::size_t level = 0; level < kLevelCount; ++level) {
+                e.progress[difficultyIndex(Difficulty::Rookie)].percentComplete[level] =
+                    clampPercent(old.percentComplete[level]);
+                e.progress[difficultyIndex(Difficulty::Rookie)].stars[level] =
+                    uint8_t(old.stars[level] & 0x07u);
+            }
+        } else {
+            got = 0;
+            if (!f->read(&e, sizeof(e), got) || got != sizeof(e)) {
+                ok = false;
+                break;
+            }
         }
 
         sanitizeEntry(e);
@@ -161,7 +211,7 @@ bool SaveData::createEntry(const char* name, uint8_t& outIndex) {
 
     SaveEntry e{};
     normalizeName(e.name, name);
-    e.unlockedCount = 1;
+    e.selectedDifficulty = uint8_t(Difficulty::Rookie);
 
     if (e.name[0] == '\0') {
         return false;
@@ -239,73 +289,91 @@ bool SaveData::renameEntry(std::size_t index, const char* name) {
     return e->name[0] != '\0';
 }
 
-uint8_t SaveData::unlockedCount(std::size_t index) const {
+Difficulty SaveData::selectedDifficulty(std::size_t index) const {
     const SaveEntry* e = entryAt(index);
-    return e ? e->unlockedCount : 0;
+    if (!e) {
+        return Difficulty::Rookie;
+    }
+    return Difficulty(clampDifficultyIndex(e->selectedDifficulty));
 }
 
-bool SaveData::setUnlockedCount(std::size_t index, uint8_t unlockedCount) {
+bool SaveData::setSelectedDifficulty(std::size_t index, Difficulty difficulty) {
     SaveEntry* e = entryAt(index);
     if (!e) {
         return false;
     }
 
-    e->unlockedCount = clampUnlockedCount(unlockedCount);
+    e->selectedDifficulty = clampDifficultyIndex(static_cast<uint8_t>(difficulty));
     return true;
 }
 
-uint8_t SaveData::levelPercent(std::size_t index, std::size_t levelIndex) const {
-    const SaveEntry* e = entryAt(index);
-    if (!e || levelIndex >= kLevelCount) {
-        return 0;
-    }
-    return e->percentComplete[levelIndex];
+uint8_t SaveData::unlockedCount(std::size_t index, Difficulty difficulty) const {
+    const DifficultyProgress* p = progressAt(index, difficulty);
+    return p ? p->unlockedCount : 0;
 }
 
-bool SaveData::setLevelPercent(std::size_t index, std::size_t levelIndex, uint8_t percent) {
-    SaveEntry* e = entryAt(index);
-    if (!e || levelIndex >= kLevelCount) {
+bool SaveData::setUnlockedCount(std::size_t index, Difficulty difficulty, uint8_t unlockedCount) {
+    DifficultyProgress* p = progressAt(index, difficulty);
+    if (!p) {
         return false;
     }
 
-    e->percentComplete[levelIndex] = clampPercent(percent);
+    p->unlockedCount = clampUnlockedCount(unlockedCount);
     return true;
 }
 
-uint8_t SaveData::levelStars(std::size_t index, std::size_t levelIndex) const {
-    const SaveEntry* e = entryAt(index);
-    if (!e || levelIndex >= kLevelCount) {
+uint8_t SaveData::levelPercent(std::size_t index, Difficulty difficulty, std::size_t levelIndex) const {
+    const DifficultyProgress* p = progressAt(index, difficulty);
+    if (!p || levelIndex >= kLevelCount) {
         return 0;
     }
-    return uint8_t(e->stars[levelIndex] & 0x07u);
+    return p->percentComplete[levelIndex];
 }
 
-bool SaveData::setLevelStars(std::size_t index, std::size_t levelIndex, uint8_t stars) {
-    SaveEntry* e = entryAt(index);
-    if (!e || levelIndex >= kLevelCount) {
+bool SaveData::setLevelPercent(std::size_t index, Difficulty difficulty, std::size_t levelIndex, uint8_t percent) {
+    DifficultyProgress* p = progressAt(index, difficulty);
+    if (!p || levelIndex >= kLevelCount) {
         return false;
     }
 
-    e->stars[levelIndex] = uint8_t(stars & 0x07u);
+    p->percentComplete[levelIndex] = clampPercent(percent);
     return true;
 }
 
-bool SaveData::hasLevelStar(std::size_t index, std::size_t levelIndex, uint8_t starBit) const {
+uint8_t SaveData::levelStars(std::size_t index, Difficulty difficulty, std::size_t levelIndex) const {
+    const DifficultyProgress* p = progressAt(index, difficulty);
+    if (!p || levelIndex >= kLevelCount) {
+        return 0;
+    }
+    return uint8_t(p->stars[levelIndex] & 0x07u);
+}
+
+bool SaveData::setLevelStars(std::size_t index, Difficulty difficulty, std::size_t levelIndex, uint8_t stars) {
+    DifficultyProgress* p = progressAt(index, difficulty);
+    if (!p || levelIndex >= kLevelCount) {
+        return false;
+    }
+
+    p->stars[levelIndex] = uint8_t(stars & 0x07u);
+    return true;
+}
+
+bool SaveData::hasLevelStar(std::size_t index, Difficulty difficulty, std::size_t levelIndex, uint8_t starBit) const {
     if (starBit >= 3) {
         return false;
     }
 
-    const uint8_t mask = levelStars(index, levelIndex);
+    const uint8_t mask = levelStars(index, difficulty, levelIndex);
     return ((mask >> starBit) & 1u) != 0;
 }
 
-bool SaveData::collectLevelStar(std::size_t index, std::size_t levelIndex, uint8_t starBit) {
-    SaveEntry* e = entryAt(index);
-    if (!e || levelIndex >= kLevelCount || starBit >= 3) {
+bool SaveData::collectLevelStar(std::size_t index, Difficulty difficulty, std::size_t levelIndex, uint8_t starBit) {
+    DifficultyProgress* p = progressAt(index, difficulty);
+    if (!p || levelIndex >= kLevelCount || starBit >= 3) {
         return false;
     }
 
-    e->stars[levelIndex] = uint8_t((e->stars[levelIndex] | uint8_t(1u << starBit)) & 0x07u);
+    p->stars[levelIndex] = uint8_t((p->stars[levelIndex] | uint8_t(1u << starBit)) & 0x07u);
     return true;
 }
 

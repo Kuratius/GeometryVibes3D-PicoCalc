@@ -126,6 +126,8 @@ uint8_t Game::progressPercent() const {
 }
 
 void Game::reset() {
+    setDifficulty(difficulty_);
+
     shipState_.y  = fx::fromInt(0);
     shipState_.vy = fx::fromInt(0);
 
@@ -143,6 +145,33 @@ void Game::reset() {
 
     if (collisionHighlightEnabled_) {
         collisionDebugPrimitives_.clear();
+    }
+}
+
+void Game::setDifficulty(Difficulty difficulty) {
+    difficulty_ = difficulty;
+
+    switch (difficulty_) {
+        case Difficulty::Rookie:
+            scrollSpeed_ = kScrollSpeedRookie;
+            flyOutSpeed_ = kFlyOutSpeedRookie;
+            break;
+
+        case Difficulty::Pro:
+            scrollSpeed_ = kScrollSpeedPro;
+            flyOutSpeed_ = kFlyOutSpeedPro;
+            break;
+
+        case Difficulty::Expert:
+            scrollSpeed_ = kScrollSpeedExpert;
+            flyOutSpeed_ = kFlyOutSpeedExpert;
+            break;
+
+        default:
+            difficulty_ = Difficulty::Rookie;
+            scrollSpeed_ = kScrollSpeedRookie;
+            flyOutSpeed_ = kFlyOutSpeedRookie;
+            break;
     }
 }
 
@@ -168,11 +197,6 @@ bool Game::loadLevel(const char* path) {
     if (levelHdr_.levelDataOffset < sizeof(LevelHeader)) { unloadLevel(); return false; }
 
     if (!loadAnimDefs()) {
-        unloadLevel();
-        return false;
-    }
-
-    if (!loadStarsFromLevel()) {
         unloadLevel();
         return false;
     }
@@ -254,14 +278,12 @@ void Game::update(const InputState& in, fx dt) {
     if (runState_ == RunState::FinishedFlyOut) {
         if (finished_) return;
 
-        xScroll_ = xScroll_ + kScrollSpeed * dt;
-        flyOutX_ = flyOutX_ + kFlyOutSpeed * dt;
+        xScroll_ = xScroll_ + scrollSpeed_ * dt;
+        flyOutX_ = flyOutX_ + flyOutSpeed_ * dt;
 
         const uint32_t dtMs = uint32_t(gv::mulInt(dt, 1000).roundToInt());
         animTimeMs_ += dtMs;
         updateAnimCache();
-
-        checkStarPickup();
 
         if (flyOutX_ >= kFlyOutCells) {
             finished_ = true;
@@ -269,7 +291,7 @@ void Game::update(const InputState& in, fx dt) {
         return;
     }
 
-    const fx speedY = kScrollSpeed;
+    const fx speedY = scrollSpeed_;
     shipState_.vy = in.thrust ? speedY : -speedY;
     shipState_.y = shipState_.y + shipState_.vy * dt;
 
@@ -277,13 +299,11 @@ void Game::update(const InputState& in, fx dt) {
 
     if (runState_ == RunState::Dead) return;
 
-    xScroll_ = xScroll_ + kScrollSpeed * dt;
+    xScroll_ = xScroll_ + scrollSpeed_ * dt;
 
     const uint32_t dtMs = uint32_t(gv::mulInt(dt, 1000).roundToInt());
     animTimeMs_ += dtMs;
     updateAnimCache();
-
-    checkStarPickup();
 
     if (checkPortalReached(shipState_.y)) {
         runState_ = RunState::FinishedFlyOut;
@@ -501,94 +521,42 @@ void Game::updateAnimCache() {
 }
 
 void Game::clearStars() {
-    levelStars_.clear();
     collectedStarsMask_ = 0;
     newlyCollectedStarsMask_ = 0;
 }
 
-bool Game::loadStarsFromLevel() {
-    clearStars();
+bool Game::tryGetStarIndex(uint16_t targetCol, uint8_t targetRow, uint8_t& outIndex) const {
     if (!hasLevel()) return false;
+    if (targetCol >= levelHdr_.width) return false;
+    if (targetRow >= kLevelHeight) return false;
 
+    uint8_t index = 0;
     Column56 col{};
-    for (uint16_t c = 0; c < levelHdr_.width; ++c) {
+
+    for (uint16_t c = 0; c <= targetCol; ++c) {
         if (!readLevelColumn(c, col)) {
             return false;
         }
 
-        for (int row = 0; row < kLevelHeight; ++row) {
+        for (uint8_t row = 0; row < kLevelHeight; ++row) {
             if (col.obstacle(row) != ObstacleId::Star) {
                 continue;
             }
 
-            if (levelStars_.size() >= kMaxLevelStars) {
-                continue;
+            if (c == targetCol && row == targetRow) {
+                outIndex = index;
+                return true;
             }
 
-            LevelStar star{};
-            star.col = c;
-            star.row = uint8_t(row);
-            star.offset = col.offsetMod(row);
-            star.index = uint8_t(levelStars_.size());
-
-            if (!levelStars_.push_back(star)) {
-                return false;
-            }
+            ++index;
         }
     }
 
-    return true;
+    return false;
 }
 
 void Game::applyOffsetToAnchor(OffsetMod om, fx& anchorX, fx& anchorY) {
     ::applyGroupOffsetToAnchor(om, anchorX, anchorY);
-}
-
-void Game::checkStarPickup() {
-    if (runState_ == RunState::Dead) return;
-    if (!hasLevel()) return;
-    if (levelStars_.empty()) return;
-
-    const fx shipX = fx::fromInt(kShipFixedX);
-    const fx shipY = shipState_.y;
-    const fx shipHalfW = fx::fromInt(kCellSize / 4);
-    const fx shipHalfH = fx::fromInt(kCellSize / 4);
-
-    static constexpr uint32_t kStarSpinPeriodMs = 2400;
-
-    for (const auto& star : levelStars_) {
-        if (starCollected(star.index)) {
-            continue;
-        }
-
-        fx centerX = worldXForColumn(star.col, xScroll_) + halfCellFx();
-        fx centerY = worldYForRow(star.row) + halfCellFx();
-        applyOffsetToAnchor(star.offset, centerX, centerY);
-
-        const uint32_t phaseMs =
-            (animTimeMs_ + uint32_t(star.index) * (kStarSpinPeriodMs / 3)) % kStarSpinPeriodMs;
-        const fx turns = fx::fromRatio(int(phaseMs), int(kStarSpinPeriodMs));
-
-        fx c = fx::one();
-        fx s = fx::zero();
-        turnsToSinCos(turns, c, s);
-
-        const fx halfH = fx::fromRatio(kCellSize * 4, 10);
-        fx halfW = halfH * abs(c);
-        if (halfW < fx::fromRatio(1, 4)) {
-            halfW = fx::fromRatio(1, 4);
-        }
-
-        const fx dx = abs(shipX - centerX);
-        const fx dy = abs(shipY - centerY);
-
-        if (dx <= (shipHalfW + halfW) && dy <= (shipHalfH + halfH)) {
-            const uint8_t bit = uint8_t(1u << star.index);
-            collectedStarsMask_ = uint8_t(collectedStarsMask_ | bit);
-            newlyCollectedStarsMask_ = uint8_t(newlyCollectedStarsMask_ | bit);
-            hud_.setEventMessage("Star collected!", false);
-        }
-    }
 }
 
 bool Game::checkPortalReached(fx shipY) const {
@@ -607,6 +575,17 @@ bool Game::checkPortalReached(fx shipY) const {
     const int py = 4;
 
     return (shipRow >= py - 1) && (shipRow <= py + 1);
+}
+
+bool Game::starOverlapsShip(gv::fx shipX, gv::fx shipY, gv::fx centerX, gv::fx centerY) const {
+    const gv::fx dx = shipX - centerX;
+    const gv::fx dy = shipY - centerY;
+
+    const gv::fx shipRadius = gv::fx::fromInt(gv::kCellSize / 4);
+    const gv::fx starRadius = gv::fx::fromInt(gv::kCellSize / 2);
+    const gv::fx sumRadius = shipRadius + starRadius;
+
+    return (dx * dx + dy * dy) <= (sumRadius * sumRadius);
 }
 
 bool Game::checkAnimatedCollisionCell(const Column56& col, int row, fx sx, fx sy, fx cellCenterX) const {
@@ -720,7 +699,7 @@ bool Game::checkStaticCollisionCell(
     return collideCell(sid, mid, staticLx, ly, shipState_.vy);
 }
 
-bool Game::checkCollisionAt(fx shipY) const {
+bool Game::checkCollisionAt(fx shipY) {
     const fx sy = shipY;
     const fx sx = fx::fromInt(kShipFixedX);
     const fx r = fx::fromInt(kCellSize / 4);
@@ -777,7 +756,38 @@ bool Game::checkCollisionAt(fx shipY) const {
 
         for (int row = 0; row < kLevelHeight; ++row) {
             const ObstacleId sid = col.obstacle(row);
-            if (sid == ObstacleId::Empty || sid == ObstacleId::Star) {
+            if (sid == ObstacleId::Empty) {
+                continue;
+            }
+
+            if (sid == ObstacleId::Star) {
+                uint8_t starIndex = 0;
+                if (!tryGetStarIndex(uint16_t(c), uint8_t(row), starIndex)) {
+                    continue;
+                }
+
+                if (starCollected(starIndex)) {
+                    continue;
+                }
+
+                if (c < staticColA || c > staticColB) {
+                    continue;
+                }
+                if (row < staticRowA || row > staticRowB) {
+                    continue;
+                }
+
+                fx centerX = worldXForColumn(c, xScroll_) + halfCellFx();
+                fx centerY = worldYForRow(row) + halfCellFx();
+                applyOffsetToAnchor(col.offsetMod(row), centerX, centerY);
+
+                if (starOverlapsShip(sx, sy, centerX, centerY)) {
+                    const uint8_t bit = uint8_t(1u << starIndex);
+                    collectedStarsMask_ = uint8_t(collectedStarsMask_ | bit);
+                    newlyCollectedStarsMask_ = uint8_t(newlyCollectedStarsMask_ | bit);
+                    hud_.setEventMessage("Star collected!", false);
+                }
+
                 continue;
             }
 

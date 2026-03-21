@@ -4,6 +4,7 @@
 #include "Hud.hpp"
 #include "Playfield.hpp"
 #include "LevelMath.hpp"
+#include "render/Colors.hpp"
 #include <cmath>
 
 namespace gv {
@@ -238,47 +239,6 @@ void SceneBuilder::drawPortalRays(RenderList& rl, const Camera& cam, const Game&
         };
 
         line3(a, b, color, cam, rl);
-    }
-}
-
-void SceneBuilder::drawLevelStars(RenderList& rl,
-                                  const Camera& cam,
-                                  const Game& game,
-                                  fx scrollX,
-                                  uint16_t color) const {
-    if (!game.hasLevel()) return;
-    if (game.starCount() == 0) return;
-
-    static constexpr uint32_t kStarSpinPeriodMs = 2400;
-
-    for (const auto& star : game.levelStars()) {
-        if (game.starCollected(star.index)) {
-            continue;
-        }
-
-        fx cx = worldXForColumn(star.col, scrollX) + fi(kCellSize / 2);
-        fx cy = worldYForRow(star.row) + fi(kCellSize / 2);
-
-        if (star.offset == OffsetMod::ShiftRight ||
-            star.offset == OffsetMod::ShiftDownRight) {
-            cx = cx + fi(kCellSize / 2);
-        }
-        if (star.offset == OffsetMod::ShiftDown ||
-            star.offset == OffsetMod::ShiftDownRight) {
-            cy = cy - fi(kCellSize / 2);
-        }
-
-        const uint32_t phaseMs =
-            (game.animTimeMs() + uint32_t(star.index) * (kStarSpinPeriodMs / 3)) % kStarSpinPeriodMs;
-        const fx turns = fx::fromRatio(int(phaseMs), int(kStarSpinPeriodMs));
-
-        addStar(
-            rl,
-            cam,
-            Vec3fx{ cx, cy, fi(kCellSize / 2) },
-            turns,
-            color
-        );
     }
 }
 
@@ -644,11 +604,9 @@ void SceneBuilder::buildScene(RenderList& rl,
                               TrailState& trail,
                               const ExplosionState& explosion,
                               const PortalRayState& portalRays) const {
-    const uint16_t kWire   = 0xFFFF;
-    const uint16_t kShip   = 0xFFFF;
-    const uint16_t kCyan   = 0x07FF;
-    const uint16_t kPurple = 0xF81F;
-    const uint16_t kStar   = 0xFFE0;
+    const uint16_t kWire   = gv::color::White;
+    const uint16_t kShip   = gv::color::White;
+    const uint16_t kStar   = gv::color::Yellow;
 
     if (!game.hasLevel()) return;
 
@@ -678,8 +636,6 @@ void SceneBuilder::buildScene(RenderList& rl,
     rectWireXZ(rl, cam, xLeft, xRight, yTop, z0, z1, kWire);
     rectWireXZ(rl, cam, xLeft, xRight, yBot, z0, z1, kWire);
 
-    drawLevelStars(rl, cam, game, scrollX, kStar);
-
     Column56 col{};
     for (int cx = col0; cx < col1; ++cx) {
         if (!game.readLevelColumn((uint16_t)cx, col))
@@ -698,6 +654,42 @@ void SceneBuilder::buildScene(RenderList& rl,
 
             const fx ox = worldX + fi(kCellSize/2);
             const fx oy = worldY + fi(kCellSize/2);
+
+            if (sid == ObstacleId::Star) {
+                uint8_t starIndex = 0;
+                if (!game.tryGetStarIndex(uint16_t(cx), uint8_t(row), starIndex)) {
+                    continue;
+                }
+
+                if (game.starCollected(starIndex)) {
+                    continue;
+                }
+
+                fx starX = cellCenterX;
+                fx starY = cellCenterY;
+
+                const OffsetMod om = col.offsetMod(row);
+                if (om == OffsetMod::ShiftRight || om == OffsetMod::ShiftDownRight) {
+                    starX = starX + fi(kCellSize / 2);
+                }
+                if (om == OffsetMod::ShiftDown || om == OffsetMod::ShiftDownRight) {
+                    starY = starY - fi(kCellSize / 2);
+                }
+
+                static constexpr uint32_t kStarSpinPeriodMs = 2400;
+                const uint32_t phaseMs =
+                    (game.animTimeMs() + uint32_t(starIndex) * (kStarSpinPeriodMs / 3)) % kStarSpinPeriodMs;
+                const fx turns = fx::fromRatio(int(phaseMs), int(kStarSpinPeriodMs));
+
+                addStar(
+                    rl,
+                    cam,
+                    Vec3fx{ starX, starY, fi(kCellSize / 2) },
+                    turns,
+                    kStar
+                );
+                continue;
+            }
 
             if (is_anim_group(sid)) {
                 const uint8_t defIndex = anim_group_index(sid);
@@ -799,7 +791,7 @@ void SceneBuilder::buildScene(RenderList& rl,
             if (row > (kLevelHeight - 1)) row = (kLevelHeight - 1);
 
             const fx pyWorld = worldYForRow(row);
-            addCube(rl, cam, {px, pyWorld, cz}, kPurple);
+            addCube(rl, cam, {px, pyWorld, cz}, gv::color::Purple);
         }
         drawPortalRays(rl, cam, game, scrollX, portalRays, kWire);
     }
@@ -807,7 +799,7 @@ void SceneBuilder::buildScene(RenderList& rl,
     const Vec3fx shipPos{ game.shipRenderX(), game.ship().y, fi(kCellSize/2) };
 
     if (game.state() != RunState::Dead) {
-        trailDraw(rl, cam, trail, scrollX, kCyan);
+        trailDraw(rl, cam, trail, scrollX, gv::color::Cyan);
 
         const fx shipLevelX = scrollX + (game.shipRenderX() - fx::fromInt(kShipFixedX));
         trailPushLevelPoint(trail, cam, shipLevelX, game.ship().y, fi(kCellSize/2));
@@ -819,7 +811,7 @@ void SceneBuilder::buildScene(RenderList& rl,
 }
 
 void SceneBuilder::buildHud(RenderList& rl, const Game& game, int screenW, int screenH) const {
-    static constexpr uint16_t kHud = 0xFFFF;
+    static constexpr uint16_t kHud = gv::color::White;
 
     const Hud& hud = game.hud();
 

@@ -117,12 +117,6 @@ private:
                         fx scrollX, const PortalRayState& portalRays,
                         uint16_t color) const;
 
-    void drawLevelStars(RenderList& rl,
-                        const Camera& cam,
-                        const Game& game,
-                        fx scrollX,
-                        uint16_t color) const;
-
     void trailPushLevelPoint(TrailState& trail, const Camera& cam,
                              fx levelX, fx y, fx z) const;
 

@@ -7,11 +7,16 @@
 namespace gv {
 
 void LevelSelectState::onEnter(App& app) {
+    selectedDifficulty_ = app.selectedDifficulty();
     selectedLevel_ = app.selectedLevel();
+    focus_ = FocusPane::Difficulty;
     rebuildTexts(app);
 }
 
 void LevelSelectState::rebuildTexts(App& app) {
+    selectedDifficulty_ = app.selectedDifficulty();
+    selectedLevel_ = app.selectedLevel();
+
     levelCount_ = app.levelCount();
     if (levelCount_ > kLevelTextCap) {
         levelCount_ = kLevelTextCap;
@@ -58,17 +63,32 @@ void LevelSelectState::buildMenu(App& app, RenderList& rl) const {
     static constexpr uint16_t kGray  = 0x8410;
 
     const int w = app.displayWidth();
-
     const int titleX = (w - menuTitle_.width()) / 2;
     rl.addText(&menuTitle_, (int16_t)titleX, 12, kWhite);
 
     const int startY = 40;
     const int lineStep = 12;
-    const int itemX = 16;
+    const int diffX = 16;
+    const int itemX = 96;
+
+    for (std::size_t i = 0; i < difficultyTexts_.size(); ++i) {
+        const bool selected = (i == difficultyIndex(selectedDifficulty_));
+
+        rl.addText(
+            &difficultyTexts_[i],
+            (int16_t)diffX,
+            (int16_t)(startY + int(i) * lineStep),
+            kWhite,
+            255,
+            selected
+    );
+}
 
     for (std::size_t i = 0; i < levelCount_; ++i) {
         const bool unlocked = app.isLevelUnlocked(i);
-        const bool selected = unlocked && (i == selectedLevel_);
+        const bool selected = unlocked &&
+                              (i == selectedLevel_) &&
+                              (focus_ == FocusPane::Levels);
         const uint16_t color = unlocked ? kWhite : kGray;
 
         rl.addText(
@@ -91,21 +111,46 @@ void LevelSelectState::update(App& app, const InputState& in, uint32_t dtUs) {
         app.statusOverlay().toggleVisible();
     }
 
-    if (in.upPressed && selectedLevel_ > 0) {
-        --selectedLevel_;
-        app.setSelectedLevel(selectedLevel_);
-    } else if (in.downPressed && (selectedLevel_ + 1) < app.unlockedLevelCount()) {
-        ++selectedLevel_;
-        app.setSelectedLevel(selectedLevel_);
+    if (in.leftPressed) {
+        focus_ = FocusPane::Difficulty;
+    } else if (in.rightPressed) {
+        focus_ = FocusPane::Levels;
+    }
+
+    if (focus_ == FocusPane::Difficulty) {
+        Difficulty next = selectedDifficulty_;
+
+        if (in.upPressed) {
+            if (next != Difficulty::Rookie) {
+                next = static_cast<Difficulty>(difficultyIndex(next) - 1);
+            }
+        } else if (in.downPressed) {
+            if (next != Difficulty::Expert) {
+                next = static_cast<Difficulty>(difficultyIndex(next) + 1);
+            }
+        }
+
+        if (next != selectedDifficulty_) {
+            app.setSelectedDifficulty(next);
+            rebuildTexts(app);
+        }
+    } else {
+        if (in.upPressed && selectedLevel_ > 0) {
+            --selectedLevel_;
+            app.setSelectedLevel(selectedLevel_);
+        } else if (in.downPressed && (selectedLevel_ + 1) < app.unlockedLevelCount()) {
+            ++selectedLevel_;
+            app.setSelectedLevel(selectedLevel_);
+        }
+        
+        if (in.confirm || in.thrustPressed) {
+            app.startLevel(selectedLevel_);
+        }
     }
 
     if (in.back) {
         app.showHomeMenu();
         return;
-    }
-
-    if (in.confirm || in.thrustPressed) {
-        app.startLevel(selectedLevel_);
     }
 }
 

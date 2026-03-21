@@ -143,7 +143,17 @@ int App::levelPercentComplete(std::size_t levelIndex) const {
     if (!hasActiveSave()) return 0;
     if (levelIndex >= kLevelCount) return 0;
 
-    return int(saveData_.levelPercent(activeSaveIndex_, levelIndex));
+    return int(saveData_.levelPercent(activeSaveIndex_, selectedDifficulty_, levelIndex));
+}
+
+void App::setSelectedDifficulty(Difficulty difficulty) {
+    selectedDifficulty_ = difficulty;
+
+    if (hasActiveSave()) {
+        (void)saveData_.setSelectedDifficulty(activeSaveIndex_, selectedDifficulty_);
+        syncRuntimeProgressFromActiveSave();
+        (void)saveSaves();
+    }
 }
 
 bool App::loadSaves() {
@@ -155,6 +165,7 @@ bool App::loadSaves() {
 
     if (saveData_.hasLastPlayed()) {
         activeSaveIndex_ = saveData_.lastPlayedIndex();
+        selectedDifficulty_ = saveData_.selectedDifficulty(activeSaveIndex_);
         syncRuntimeProgressFromActiveSave();
     } else {
         clearActiveSaveState();
@@ -175,6 +186,7 @@ bool App::createNewSave(const char* name) {
     }
 
     activeSaveIndex_ = index;
+    selectedDifficulty_ = saveData_.selectedDifficulty(index);
     saveData_.setLastPlayedIndex(index);
     syncRuntimeProgressFromActiveSave();
     return saveSaves();
@@ -186,6 +198,8 @@ bool App::selectSave(std::size_t index) {
     }
 
     activeSaveIndex_ = static_cast<uint8_t>(index);
+    selectedDifficulty_ = saveData_.selectedDifficulty(activeSaveIndex_);
+
     if (!saveData_.setLastPlayedIndex(activeSaveIndex_)) {
         return false;
     }
@@ -205,6 +219,7 @@ bool App::deleteSave(std::size_t index) {
 
     if (saveData_.hasLastPlayed()) {
         activeSaveIndex_ = saveData_.lastPlayedIndex();
+        selectedDifficulty_ = saveData_.selectedDifficulty(activeSaveIndex_);
         syncRuntimeProgressFromActiveSave();
     } else {
         clearActiveSaveState();
@@ -245,7 +260,7 @@ void App::syncRuntimeProgressFromActiveSave() {
 #ifdef GV3D_TESTING
     unlockedLevelCount_ = kLevelCount;
 #else
-    std::size_t unlocked = saveData_.unlockedCount(activeSaveIndex_);
+    std::size_t unlocked = saveData_.unlockedCount(activeSaveIndex_, selectedDifficulty_);
     if (unlocked < 1) unlocked = 1;
     if (unlocked > kLevelCount) unlocked = kLevelCount;
     unlockedLevelCount_ = unlocked;
@@ -263,14 +278,14 @@ bool App::saveCurrentProgress() {
 
     const uint8_t progress = static_cast<uint8_t>(game_.progressPercent());
     const uint8_t oldProgress = static_cast<uint8_t>(
-        saveData_.levelPercent(activeSaveIndex_, selectedLevel_)
+        saveData_.levelPercent(activeSaveIndex_, selectedDifficulty_, selectedLevel_)
     );
 
     if (progress <= oldProgress) {
         return saveSaves();
     }
 
-    if (!saveData_.setLevelPercent(activeSaveIndex_, selectedLevel_, progress)) {
+    if (!saveData_.setLevelPercent(activeSaveIndex_, selectedDifficulty_, selectedLevel_, progress)) {
         return false;
     }
 
@@ -281,17 +296,18 @@ bool App::saveLevelCompletion(std::size_t levelIndex) {
     if (!hasActiveSave()) return false;
     if (levelIndex >= kLevelCount) return false;
 
-    if (!saveData_.setLevelPercent(activeSaveIndex_, levelIndex, 100)) {
+    if (!saveData_.setLevelPercent(activeSaveIndex_, selectedDifficulty_, levelIndex, 100)) {
         return false;
     }
 
 #ifndef GV3D_TESTING
-    const uint8_t unlocked = saveData_.unlockedCount(activeSaveIndex_);
+    const uint8_t unlocked = saveData_.unlockedCount(activeSaveIndex_, selectedDifficulty_);
     const std::size_t frontier = (unlocked > 0) ? (unlocked - 1) : 0;
 
     if (levelIndex == frontier && unlocked < kLevelCount) {
         if (!saveData_.setUnlockedCount(
                 activeSaveIndex_,
+                selectedDifficulty_,
                 static_cast<uint8_t>(unlocked + 1))) {
             return false;
         }
@@ -306,7 +322,7 @@ uint8_t App::collectedStarsForLevel(std::size_t levelIndex) const {
     if (!hasActiveSave()) return 0;
     if (levelIndex >= kLevelCount) return 0;
 
-    return uint8_t(saveData_.levelStars(activeSaveIndex_, levelIndex) & 0x07u);
+    return uint8_t(saveData_.levelStars(activeSaveIndex_, selectedDifficulty_, levelIndex) & 0x07u);
 }
 
 bool App::collectStar(std::size_t levelIndex, uint8_t starIndex) {
@@ -315,15 +331,15 @@ bool App::collectStar(std::size_t levelIndex, uint8_t starIndex) {
     if (starIndex >= 3) return false;
 
     const uint8_t oldMask = uint8_t(
-        saveData_.levelStars(activeSaveIndex_, levelIndex) & 0x07u
+        saveData_.levelStars(activeSaveIndex_, selectedDifficulty_, levelIndex) & 0x07u
     );
 
-    if (!saveData_.collectLevelStar(activeSaveIndex_, levelIndex, starIndex)) {
+    if (!saveData_.collectLevelStar(activeSaveIndex_, selectedDifficulty_, levelIndex, starIndex)) {
         return false;
     }
 
     const uint8_t newMask = uint8_t(
-        saveData_.levelStars(activeSaveIndex_, levelIndex) & 0x07u
+        saveData_.levelStars(activeSaveIndex_, selectedDifficulty_, levelIndex) & 0x07u
     );
 
     if (newMask == oldMask) {
@@ -384,6 +400,8 @@ bool App::startLevel(std::size_t levelIndex) {
 
     game_.reset();
     game_.setFileSystem(&plat_->fs());
+    game_.setLevelIndex(levelIndex);
+    game_.setDifficulty(selectedDifficulty_);
 
     const LevelEntry& e = kLevels[levelIndex];
     if (!game_.loadLevel(e.path)) {
@@ -393,7 +411,9 @@ bool App::startLevel(std::size_t levelIndex) {
     }
 
     if (hasActiveSave() && levelIndex < SaveData::kLevelCount) {
-        game_.setCollectedStarsMask(saveData_.levelStars(activeSaveIndex_, levelIndex));
+        game_.setCollectedStarsMask(
+            saveData_.levelStars(activeSaveIndex_, selectedDifficulty_, levelIndex)
+        );
     } else {
         game_.setCollectedStarsMask(0);
     }
@@ -405,6 +425,7 @@ bool App::startLevel(std::size_t levelIndex) {
 
 void App::clearActiveSaveState() {
     activeSaveIndex_ = SaveData::kNoSelection;
+    selectedDifficulty_ = Difficulty::Rookie;
     unlockedLevelCount_ = 1;
     selectedLevel_ = 0;
 }

@@ -13,19 +13,24 @@ constexpr int kStartRow = 1;
 constexpr int kShipFixedX = 40; // keep the ship fixed at this world-space X.
 
 // ---- Game tuning ----
-constexpr fx kScrollSpeed      = fx::fromInt(100);
-constexpr fx kFlyOutSpeed      = fx::fromInt(120);
+constexpr fx kScrollSpeedRookie = fx::fromInt(100);
+constexpr fx kScrollSpeedPro    = fx::fromInt(115);
+constexpr fx kScrollSpeedExpert = fx::fromInt(130);
 
-constexpr fx kFlyOutCells      = fx::fromInt(16 * kCellSize);
+constexpr fx kFlyOutSpeedRookie = fx::fromInt(120);
+constexpr fx kFlyOutSpeedPro    = fx::fromInt(138);
+constexpr fx kFlyOutSpeedExpert = fx::fromInt(156);
+
+constexpr fx kFlyOutCells = fx::fromInt(16 * kCellSize);
 
 // We use this to vertically follow the ship without changing pitch.
-constexpr fx kCameraFollow     = fx::fromRatio(3, 20); // 0.15
+constexpr fx kCameraFollow = fx::fromRatio(3, 20); // 0.15
 
 // ---- SceneBuilder tuning ----
-constexpr int kColsVisible     = 26;
-constexpr int kColsPadLeft     = 8;
-constexpr int kColsPadCells    = 2;   // pad visible X span by this many cells.
-constexpr int kTrailMax        = 48;
+constexpr int kColsVisible  = 26;
+constexpr int kColsPadLeft  = 8;
+constexpr int kColsPadCells = 2;   // pad visible X span by this many cells.
+constexpr int kTrailMax     = 48;
 
 // ---- Default camera ----
 constexpr fx kDefaultFocal = fx::fromInt(180);

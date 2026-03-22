@@ -1,11 +1,9 @@
 #include "Project.hpp"
 #include <cstdint>
 
-#ifndef unlikely
-#define unlikely(x) __builtin_expect(!!(x), 0)
-#endif
-
 namespace gv {
+
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 // Set to 1 to use the fast approximate normalization path.
 // Set to 0 to use the original divide-by-length normalization.

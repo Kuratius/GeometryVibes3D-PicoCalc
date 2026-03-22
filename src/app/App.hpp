@@ -31,7 +31,7 @@ public:
     };
 
 public:
-    int run(IPlatform& platform);
+    int run(IPlatform* platform);
 
     IPlatform& platform() { return *plat_; }
     const IPlatform& platform() const { return *plat_; }

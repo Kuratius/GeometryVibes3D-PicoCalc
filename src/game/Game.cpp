@@ -10,19 +10,16 @@
 
 namespace {
 
-static constexpr const char* kControlsHintStart    = "START[SPACE]";
-static constexpr const char* kControlsHintPause    = "PAUSE[ESC]";
-static constexpr const char* kControlsHintContinue = "CONTINUE[SPACE]";
-
-static inline int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
-
-static inline gv::fx halfCellFx() { return gv::fx::fromInt(gv::kCellSize / 2); }
-
-static inline gv::fx q7ScaleToFx(uint8_t q7) {
+constexpr const char* kControlsHintStart    = "START[SPACE]";
+constexpr const char* kControlsHintPause    = "PAUSE[POWER]";
+constexpr const char* kControlsHintContinue = "CONTINUE[SPACE]";
+inline int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+inline gv::fx halfCellFx() { return gv::fx::fromInt(gv::kCellSize / 2); }
+inline gv::fx q7ScaleToFx(uint8_t q7) {
     return gv::fx::fromRatio(int(q7), 128);
 }
 
-static inline void applyGroupOffsetToAnchor(gv::OffsetMod gm, gv::fx& anchorX, gv::fx& anchorY) {
+inline void applyGroupOffsetToAnchor(gv::OffsetMod gm, gv::fx& anchorX, gv::fx& anchorY) {
     const gv::fx half = halfCellFx();
 
     if (gm == gv::OffsetMod::ShiftRight ||
@@ -36,7 +33,7 @@ static inline void applyGroupOffsetToAnchor(gv::OffsetMod gm, gv::fx& anchorX, g
     }
 }
 
-static inline void turnsToSinCos(gv::fx turns, gv::fx& c, gv::fx& s) {
+inline void turnsToSinCos(gv::fx turns, gv::fx& c, gv::fx& s) {
     const double t = double(turns.raw()) / double(1 << gv::fx::SHIFT);
     const double a = t * 6.28318530717958647692;
 
@@ -44,7 +41,7 @@ static inline void turnsToSinCos(gv::fx turns, gv::fx& c, gv::fx& s) {
     s = gv::fx::fromRaw(int32_t(std::lround(std::sin(a) * double(1 << gv::fx::SHIFT))));
 }
 
-static inline void inverseRotatePointAround(gv::fx& x, gv::fx& y,
+inline void inverseRotatePointAround(gv::fx& x, gv::fx& y,
                                             gv::fx ox, gv::fx oy,
                                             gv::fx c, gv::fx s) {
     const gv::fx dx = x - ox;
@@ -57,7 +54,7 @@ static inline void inverseRotatePointAround(gv::fx& x, gv::fx& y,
     y = oy + ndy;
 }
 
-static inline void inverseScalePointAround(gv::fx& x, gv::fx& y,
+inline void inverseScalePointAround(gv::fx& x, gv::fx& y,
                                            gv::fx ox, gv::fx oy,
                                            gv::fx scale) {
     if (scale.raw() == 0) return;
@@ -65,7 +62,7 @@ static inline void inverseScalePointAround(gv::fx& x, gv::fx& y,
     y = oy + (y - oy) / scale;
 }
 
-static inline int computeAnimSearchPadCells(const gv::Game& game) {
+inline int computeAnimSearchPadCells(const gv::Game& game) {
     int maxRadiusHalfCells = 0;
 
     for (std::size_t defIndex = 0; defIndex < game.animGroupDefs().size(); ++defIndex) {
@@ -291,8 +288,10 @@ void Game::update(const InputState& in, fx dt) {
         return;
     }
 
-    const fx speedY = scrollSpeed_;
-    shipState_.vy = in.thrust ? speedY : -speedY;
+    if (runState_ != RunState::Dead) {
+        const fx speedY = scrollSpeed_;
+        shipState_.vy = in.thrust ? speedY : -speedY;
+    }
     shipState_.y = shipState_.y + shipState_.vy * dt;
 
     shipState_.y = clamp(shipState_.y, -halfH, halfH);
@@ -604,22 +603,22 @@ bool Game::checkAnimatedCollisionCell(const Column56& col, int row, fx sx, fx sy
 
     fx anchorX = cellCenterX;
     fx anchorY = worldYForRow(row) + halfCellFx();
-    applyGroupOffsetToAnchor(gm, anchorX, anchorY);
+    ::applyGroupOffsetToAnchor(gm, anchorX, anchorY);
 
     const fx angleTurns = animGroupAngleTurns_[defIndex];
     const fx groupScale = animGroupScale_[defIndex];
 
     fx gc = fx::one();
     fx gs = fx::zero();
-    turnsToSinCos(angleTurns, gc, gs);
+    ::turnsToSinCos(angleTurns, gc, gs);
 
     const fx groupPivotX = anchorX + mulInt(halfCellFx(), int(def.hdr.pivotHx));
     const fx groupPivotY = anchorY - mulInt(halfCellFx(), int(def.hdr.pivotHy));
 
     fx sxLocal = sx;
     fx syLocal = sy;
-    inverseRotatePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, gc, gs);
-    inverseScalePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, groupScale);
+    ::inverseRotatePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, gc, gs);
+    ::inverseScalePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, groupScale);
 
     for (uint8_t i = 0; i < def.hdr.primitiveCount; ++i) {
         const AnimPrimitiveDef& p = animPrimitives_[def.firstPrimitive + i];
@@ -732,7 +731,7 @@ bool Game::checkCollisionAt(fx shipY) {
         staticRowB = t;
     }
 
-    const int animPadCells = computeAnimSearchPadCells(*this);
+    const int animPadCells = ::computeAnimSearchPadCells(*this);
 
     int animCol0 = staticColA - animPadCells;
     int animCol1 = staticColB + animPadCells;

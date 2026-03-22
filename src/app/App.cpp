@@ -3,12 +3,11 @@
 #include "render/Colors.hpp"
 #include <cstdio>
 
-namespace gv {
 
 namespace {
-
-static constexpr uint32_t kFrameUs = 33333;      // ~30 FPS
-static constexpr uint32_t kBatteryPollUs = 2000000; // 2 seconds
+    
+constexpr uint32_t kFrameUs = 33333;      // ~30 FPS
+constexpr uint32_t kBatteryPollUs = 2000000; // 2 seconds
 
 struct BatteryFooterCache {
     uint32_t accumUs = kBatteryPollUs; // force immediate first update
@@ -17,8 +16,8 @@ struct BatteryFooterCache {
     bool valid = false;
 };
 
-void updateBatteryFooter(StatusOverlay& overlay,
-                         const IPlatform& platform,
+inline void updateBatteryFooter(gv::StatusOverlay& overlay,
+                         const gv::IPlatform& platform,
                          BatteryFooterCache& cache,
                          uint32_t dtUs) {
     cache.accumUs += dtUs;
@@ -26,36 +25,36 @@ void updateBatteryFooter(StatusOverlay& overlay,
         return;
     }
     cache.accumUs = 0;
-
+    
     const uint8_t level = platform.batteryLevelPercent();
     const bool charging = platform.batteryCharging();
-
+    
     if (cache.valid && cache.level == level && cache.charging == charging) {
         return;
     }
-
+    
     cache.level = level;
     cache.charging = charging;
     cache.valid = true;
-
+    
     uint16_t color = gv::color::Green;
     if (level < 10) {
         color = gv::color::Red;
     } else if (level < 30) {
         color = gv::color::Yellow;
     }
-
+    
     char buf[32];
     if (charging) {
         std::snprintf(buf, sizeof(buf), "Batt Charging: %u%%", unsigned(level));
     } else {
         std::snprintf(buf, sizeof(buf), "Batt: %u%%", unsigned(level));
     }
-
+    
     overlay.setFooterRight(buf, color);
 }
 
-bool keyToChar(uint8_t key, char& out) {
+inline bool keyToChar(uint8_t key, char& out) {
     if (key >= 'A' && key <= 'Z') {
         out = static_cast<char>(key);
         return true;
@@ -79,14 +78,16 @@ bool keyToChar(uint8_t key, char& out) {
     return false;
 }
 
-} // namespace
+} // anon
 
-int App::run(IPlatform& platform) {
-    plat_ = &platform;
+namespace gv {
+
+int App::run(IPlatform* platform) {
+    plat_ = platform;
     init(*plat_);
 
     uint32_t accumUs = 0;
-    BatteryFooterCache batteryCache{};
+    ::BatteryFooterCache batteryCache{};
 
     while (true) {
         uint32_t dtUs = plat_->dtUs();
@@ -105,7 +106,7 @@ int App::run(IPlatform& platform) {
         if (currentState_) {
             currentState_->update(*this, in, kFrameUs);
             if (currentState_) {
-                updateBatteryFooter(statusOverlay_, *plat_, batteryCache, kFrameUs);
+                ::updateBatteryFooter(statusOverlay_, *plat_, batteryCache, kFrameUs);
                 currentState_->render(*this, plat_->display(), frame_);
             }
         }
@@ -465,7 +466,7 @@ InputState App::pollInput() const {
 
     in.confirm = kb.pressed(KEY_ENTER) || kb.pressed(KEY_RETURN);
     in.back = kb.pressed(KEY_ESC);
-    in.pausePressed = kb.pressed(KEY_ESC) || kb.pressed(KEY_POWER);
+    in.pausePressed = kb.pressed(KEY_POWER);
     in.overlayTogglePressed = kb.pressed(KEY_F1);
 
     in.backspacePressed = kb.pressed(KEY_BACKSPACE);
@@ -474,7 +475,7 @@ InputState App::pollInput() const {
     for (uint16_t key = 0x20; key <= 0x7E; ++key) {
         if (kb.pressed(static_cast<uint8_t>(key))) {
             char c = '\0';
-            if (keyToChar(static_cast<uint8_t>(key), c)) {
+            if (::keyToChar(static_cast<uint8_t>(key), c)) {
                 in.typedChar = c;
                 break;
             }

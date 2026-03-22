@@ -147,7 +147,7 @@ void LevelSelectState::update(App& app, const InputState& in, uint32_t dtUs) {
     }
 
     if (in.back) {
-        app.showHomeMenu();
+        app.showSavedGames();
         return;
     }
 }

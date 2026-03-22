@@ -42,16 +42,18 @@ void PlayingState::update(App& app, const InputState& in, uint32_t dtUs) {
         app.statusOverlay().toggleVisible();
     }
 
-    if (in.pausePressed && !game.paused()) {
-        game.pause();
-        return;
-    }
-
-    if (game.paused()) {
-        if (in.thrustPressed) {
-            game.resume();
+    if (game.state() != RunState::Dead) {
+        if (in.pausePressed && !game.paused()) {
+            game.pause();
+            return;
         }
-        return;
+
+        if (game.paused()) {
+            if (in.thrustPressed) {
+                game.resume();
+            }
+            return;
+        }
     }
 
     const RunState prevState = game.state();

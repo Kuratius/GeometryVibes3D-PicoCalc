@@ -184,10 +184,9 @@ In VS Code: **Ctrl+Shift+B**
 
 Use the `picotool` task or drag the UF2 in **BOOTSEL** mode.
 
-## Gameplay Images
+## Video Demo
 
-![Level 1 start](images/ScreenShot1.png)
-![Portal rays](images/ScreenShot2.png)
-![Level 1 late](images/ScreenShot3.png)
-![Level 1 obstacles](images/ScreenShot4.png)
-![Title screen](images/ScreenShot5.png)
+[![Watch the demo](./images/VideoThumb.png)](./media/GameplayVideo.mp4)
+
+## Title Screen
+![Title screen](images/TitleScreen.png)

@@ -17,7 +17,10 @@ public:
     virtual void onExit(App& app) {}
 
     virtual void update(App& app, const InputState& in, uint32_t dtUs) = 0;
-    virtual void render(App& app, IDisplay& display, RenderList& rl) = 0;
+    
+    virtual bool rendersDirectly() const { return false; }
+    virtual void render(App& app, RenderList& rl) { (void)app; (void)rl; };
+    virtual void renderDirect(App& app, IDisplay& display) { (void)app; (void)display; }
 };
 
 } // namespace gv

@@ -1,7 +1,6 @@
 #include "HomeMenuState.hpp"
 #include "App.hpp"
 #include "render/RenderList.hpp"
-#include "StatusOverlayView.hpp"
 #include "render/Colors.hpp"
 
 namespace gv {
@@ -42,10 +41,6 @@ void HomeMenuState::moveSelection(const App& app, int dir) {
 void HomeMenuState::update(App& app, const InputState& in, uint32_t dtUs) {
     (void)dtUs;
 
-    if (in.overlayTogglePressed) {
-        app.statusOverlay().toggleVisible();
-    }
-
     if (in.upPressed) {
         moveSelection(app, -1);
     } else if (in.downPressed) {
@@ -84,7 +79,7 @@ void HomeMenuState::update(App& app, const InputState& in, uint32_t dtUs) {
     }
 }
 
-void HomeMenuState::render(App& app, IDisplay& display, RenderList& rl) {
+void HomeMenuState::render(App& app, RenderList& rl) {
     rl.clear();
 
     const int w = app.displayWidth();
@@ -107,17 +102,6 @@ void HomeMenuState::render(App& app, IDisplay& display, RenderList& rl) {
             selected
         );
     }
-
-    StatusOverlayView::appendTo(
-        rl,
-        app.statusOverlay(),
-        app.displayWidth(),
-        app.displayHeight()
-    );
-
-    display.beginFrame();
-    display.draw(rl);
-    display.endFrame();
 }
 
 } // namespace gv

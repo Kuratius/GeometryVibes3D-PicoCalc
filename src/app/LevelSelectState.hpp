@@ -13,7 +13,7 @@ public:
     void onEnter(App& app) override;
 
     void update(App& app, const InputState& in, uint32_t dtUs) override;
-    void render(App& app, IDisplay& display, RenderList& rl) override;
+    void render(App& app, RenderList& rl) override;
 
 private:
     enum class FocusPane : uint8_t {

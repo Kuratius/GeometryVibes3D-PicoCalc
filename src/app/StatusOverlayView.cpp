@@ -16,13 +16,13 @@ void appendTo(RenderList& rl,
 {
     if (!overlay.visible()) return;
 
-    static constexpr uint16_t kFooter = gv::color::Gray;
     static constexpr int kLineStep = 10;
     static constexpr int kPanelX = 8;
     static constexpr int kBottomMargin = 8;
     static constexpr int kFooterGap = 8;
     static constexpr int kRightMargin = 8;
     static constexpr int kGlyphW = 8;
+    static constexpr uint16_t kFooter = gv::color::Gray;
 
     static Text footerText{ "F1 to hide" };
 

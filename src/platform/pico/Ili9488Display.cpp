@@ -437,7 +437,7 @@ void Ili9488Display::binFrameLines(Frame& f) {
     f.lineSlabOffset[0] = 0;
     for (int s = 0; s < NUM_SLABS; ++s) {
         int next = (int)f.lineSlabOffset[s] + (int)f.lineSlabCount[s];
-        if (next > MAX_LINE_BINNED) next = MAX_LINE_BINNED;
+        if (next > MAX_LINES_BINNED) next = MAX_LINES_BINNED;
         f.lineSlabOffset[s + 1] = (uint16_t)next;
     }
     f.lineBinnedTotal = f.lineSlabOffset[NUM_SLABS];
@@ -464,7 +464,7 @@ void Ili9488Display::binFrameLines(Frame& f) {
 
         for (int s = s0; s <= s1; ++s) {
             const uint16_t idx = f.lineSlabCursor[s];
-            if (idx < f.lineSlabOffset[s + 1] && idx < MAX_LINE_BINNED) {
+            if (idx < f.lineSlabOffset[s + 1] && idx < MAX_LINES_BINNED) {
                 f.lineSlabIndices[idx] = (uint16_t)i;
                 f.lineSlabCursor[s] = (uint16_t)(idx + 1);
             }
@@ -504,7 +504,7 @@ void Ili9488Display::binFrameFillRects(Frame& f) {
     f.fillRectSlabOffset[0] = 0;
     for (int s = 0; s < NUM_SLABS; ++s) {
         int next = (int)f.fillRectSlabOffset[s] + (int)f.fillRectSlabCount[s];
-        if (next > MAX_FILLRECT_BINNED) next = MAX_FILLRECT_BINNED;
+        if (next > MAX_FILLRECTS_BINNED) next = MAX_FILLRECTS_BINNED;
         f.fillRectSlabOffset[s + 1] = (uint16_t)next;
     }
     f.fillRectBinnedTotal = f.fillRectSlabOffset[NUM_SLABS];
@@ -533,7 +533,7 @@ void Ili9488Display::binFrameFillRects(Frame& f) {
 
         for (int s = s0; s <= s1; ++s) {
             const uint16_t idx = f.fillRectSlabCursor[s];
-            if (idx < f.fillRectSlabOffset[s + 1] && idx < MAX_FILLRECT_BINNED) {
+            if (idx < f.fillRectSlabOffset[s + 1] && idx < MAX_FILLRECTS_BINNED) {
                 f.fillRectSlabIndices[idx] = (uint16_t)i;
                 f.fillRectSlabCursor[s] = (uint16_t)(idx + 1);
             }

@@ -5,9 +5,7 @@ namespace gv {
 
 void StatusOverlay::clear() {
     lines_.clear();
-    footerRightText_.clear();
-    footerRightColor565_ = gv::color::White;
-    hasFooterRight_ = false;
+    clearFooterRight();
 }
 
 bool StatusOverlay::addMessage(const char* s, uint16_t color565) {
@@ -20,7 +18,6 @@ bool StatusOverlay::addMessage(const char* s, uint16_t color565) {
 
         OverlayLine& line = lines_.back();
         line.color565 = color565;
-        line.text.clear();
         line.text.setText(s);
 
         visible_ = true;
@@ -33,7 +30,6 @@ bool StatusOverlay::addMessage(const char* s, uint16_t color565) {
 
     OverlayLine& line = lines_.back();
     line.color565 = color565;
-    line.text.clear();
     line.text.setText(s);
 
     visible_ = true;
@@ -53,20 +49,20 @@ bool StatusOverlay::addError(const char* s) {
 }
 
 void StatusOverlay::setFooterRight(const char* s, uint16_t color565) {
-    footerRightText_.clear();
-    footerRightColor565_ = color565;
-
+    footerRight_.color565 = color565;
+    
     if (s && *s) {
-        footerRightText_.setText(s);
+        footerRight_.text.setText(s);
         hasFooterRight_ = true;
     } else {
+        footerRight_.text.clear();
         hasFooterRight_ = false;
     }
 }
 
 void StatusOverlay::clearFooterRight() {
-    footerRightText_.clear();
-    footerRightColor565_ = gv::color::White;
+    footerRight_.text.clear();
+    footerRight_.color565 = gv::color::White;
     hasFooterRight_ = false;
 }
 

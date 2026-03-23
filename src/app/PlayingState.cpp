@@ -1,7 +1,6 @@
 #include "PlayingState.hpp"
 #include "App.hpp"
 #include "render/RenderList.hpp"
-#include "StatusOverlayView.hpp"
 
 namespace gv {
 
@@ -37,10 +36,6 @@ void PlayingState::returnToLevelSelect(App& app) {
 
 void PlayingState::update(App& app, const InputState& in, uint32_t dtUs) {
     Game& game = app.game();
-
-    if (in.overlayTogglePressed) {
-        app.statusOverlay().toggleVisible();
-    }
 
     if (game.state() != RunState::Dead) {
         if (in.pausePressed && !game.paused()) {
@@ -117,7 +112,7 @@ void PlayingState::update(App& app, const InputState& in, uint32_t dtUs) {
     buildCameraBasis(cam_);
 }
 
-void PlayingState::render(App& app, IDisplay& display, RenderList& rl) {
+void PlayingState::render(App& app, RenderList& rl) {
     rl.clear();
     sceneBuilder_.buildScene(rl, cam_, app.game(), app.game().scrollX(), trail_, explosion_, portalRays_);
 
@@ -126,16 +121,6 @@ void PlayingState::render(App& app, IDisplay& display, RenderList& rl) {
     }
 
     sceneBuilder_.buildHud(rl, app.game(), app.displayWidth(), app.displayHeight());
-    StatusOverlayView::appendTo(
-        rl,
-        app.statusOverlay(),
-        app.displayWidth(),
-        app.displayHeight()
-    );
-
-    display.beginFrame();
-    display.draw(rl);
-    display.endFrame();
 }
 
 } // namespace gv

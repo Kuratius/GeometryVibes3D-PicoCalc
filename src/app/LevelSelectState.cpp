@@ -1,7 +1,6 @@
 #include "LevelSelectState.hpp"
 #include "App.hpp"
 #include "render/RenderList.hpp"
-#include "StatusOverlayView.hpp"
 #include "render/Colors.hpp"
 #include <cstdio>
 
@@ -105,10 +104,6 @@ void LevelSelectState::buildMenu(App& app, RenderList& rl) const {
 void LevelSelectState::update(App& app, const InputState& in, uint32_t dtUs) {
     (void)dtUs;
 
-    if (in.overlayTogglePressed) {
-        app.statusOverlay().toggleVisible();
-    }
-
     if (in.leftPressed) {
         focus_ = FocusPane::Difficulty;
     } else if (in.rightPressed) {
@@ -152,19 +147,9 @@ void LevelSelectState::update(App& app, const InputState& in, uint32_t dtUs) {
     }
 }
 
-void LevelSelectState::render(App& app, IDisplay& display, RenderList& rl) {
+void LevelSelectState::render(App& app, RenderList& rl) {
     rl.clear();
     buildMenu(app, rl);
-    StatusOverlayView::appendTo(
-        rl,
-        app.statusOverlay(),
-        app.displayWidth(),
-        app.displayHeight()
-    );
-
-    display.beginFrame();
-    display.draw(rl);
-    display.endFrame();
 }
 
 } // namespace gv

@@ -26,6 +26,9 @@ public:
     
     static constexpr int W = 320;
     static constexpr int H = 320;
+    // Number of screen rows in one render slab.
+    // Higher values reduce slab count and binning overhead, but increase temporary
+    // slab-buffer size and per-slab work. Tune this based on typical scene complexity and available memory.
     static constexpr int SLAB_ROWS = 8;
 
 private:
@@ -39,12 +42,15 @@ private:
 
     static constexpr int NUM_SLABS = (H + SLAB_ROWS - 1) / SLAB_ROWS;
 
-    static constexpr int MAX_LINES           = 3144;
-    static constexpr int MAX_LINE_BINNED     = 8192;
-    static constexpr int MAX_FILLRECTS       = 128;
-    static constexpr int MAX_FILLRECT_BINNED = 512;
-    static constexpr int MAX_TEXTS           = 16;
-    static constexpr int MAX_TEXT_BINNED     = 256;
+    // These *_BINNED capacities are heuristic budgets for slab references, not exact bounds.
+    // If primitives start disappearing or partial-frame artifacts appear under heavier scenes,
+    // increase these values.
+    static constexpr int MAX_LINES            = RenderList::LINE_CAP;
+    static constexpr int MAX_LINES_BINNED     = MAX_LINES * 2;
+    static constexpr int MAX_FILLRECTS        = RenderList::FILLRECT_CAP;
+    static constexpr int MAX_FILLRECTS_BINNED = MAX_FILLRECTS * 4;
+    static constexpr int MAX_TEXTS            = RenderList::TEXT_CAP;
+    static constexpr int MAX_TEXT_BINNED      = MAX_TEXTS * 8 / 3;
 
     struct Line {
         int16_t x0, y0, x1, y1;
@@ -58,7 +64,7 @@ private:
         uint16_t lineSlabCount[NUM_SLABS]{};
         uint16_t lineSlabOffset[NUM_SLABS + 1]{};
         uint16_t lineSlabCursor[NUM_SLABS]{};
-        uint16_t lineSlabIndices[MAX_LINE_BINNED]{};
+        uint16_t lineSlabIndices[MAX_LINES_BINNED]{};
         int lineBinnedTotal = 0;
 
         int fillRectCount = 0;
@@ -67,7 +73,7 @@ private:
         uint16_t fillRectSlabCount[NUM_SLABS]{};
         uint16_t fillRectSlabOffset[NUM_SLABS + 1]{};
         uint16_t fillRectSlabCursor[NUM_SLABS]{};
-        uint16_t fillRectSlabIndices[MAX_FILLRECT_BINNED]{};
+        uint16_t fillRectSlabIndices[MAX_FILLRECTS_BINNED]{};
         int fillRectBinnedTotal = 0;
 
         int textCount = 0;

@@ -16,7 +16,10 @@ public:
     void onExit(App& app) override;
 
     void update(App& app, const InputState& in, uint32_t dtUs) override;
-    void render(App& app, IDisplay& display, RenderList& rl) override;
+    
+    bool rendersDirectly() const override { return true; }
+    
+    void renderDirect(App& app, IDisplay& display) override;
 
 private:
     static constexpr int kAssetW = 320;
@@ -31,13 +34,11 @@ private:
     bool loadTitleAsset(IFileSystem& fs, const char* path);
     void unloadTitleAsset();
     void buildAlphaLut();
-    void drawPlaceholderPattern(IDisplay& display);
 
     static fx easeInOutCubic(fx t);
 
 private:
     IFile* file_ = nullptr;
-    bool accepted_ = false;
     bool drawnFull_ = false;
     bool assetMissing_ = false;
 

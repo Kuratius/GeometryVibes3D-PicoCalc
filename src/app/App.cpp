@@ -1,4 +1,5 @@
 #include "App.hpp"
+#include "StatusOverlayView.hpp"
 #include "platform/Keys.hpp"
 #include "render/Colors.hpp"
 #include <cstdio>
@@ -101,14 +102,25 @@ int App::run(IPlatform* platform) {
         plat_->input().update();
         InputState in = pollInput();
 
+        if (in.overlayTogglePressed) {
+            statusOverlay_.toggleVisible();
+        }
+
         accumUs -= kFrameUs;
 
         if (currentState_) {
             currentState_->update(*this, in, kFrameUs);
-            if (currentState_) {
-                ::updateBatteryFooter(statusOverlay_, *plat_, batteryCache, kFrameUs);
-                currentState_->render(*this, plat_->display(), frame_);
+            auto& display = plat_->display();
+            ::updateBatteryFooter(statusOverlay_, *plat_, batteryCache, kFrameUs);
+            if (currentState_->rendersDirectly()) {
+                currentState_->renderDirect(*this, display);
+                continue;
             }
+            display.beginFrame();
+            currentState_->render(*this, frame_);
+            StatusOverlayView::appendTo(frame_, statusOverlay_, display.width(), display.height());
+            display.draw(frame_);
+            display.endFrame();         
         }
     }
 

@@ -73,7 +73,6 @@ bool TitleState::loadTitleAsset(IFileSystem& fs, const char* path) {
     if (!path) return false;
 
     file_ = fs.openRead(path);
-    accepted_ = false;
     drawnFull_ = false;
     assetMissing_ = (file_ == nullptr);
 
@@ -87,38 +86,15 @@ void TitleState::unloadTitleAsset() {
         file_ = nullptr;
     }
 
-    accepted_ = false;
     drawnFull_ = false;
     assetMissing_ = false;
     phaseFrame_ = 0;
 }
 
-void TitleState::drawPlaceholderPattern(IDisplay& display) {
-    if (drawnFull_) {
-        return;
-    }
-
-    for (int y = 0; y < kAssetH; y += kSlabRows) {
-        const int rows = ((y + kSlabRows) <= kAssetH) ? kSlabRows : (kAssetH - y);
-
-        for (int row = 0; row < rows; ++row) {
-            uint16_t* dst = s_titleSlab + row * kAssetW;
-            for (int x = 0; x < kAssetW; ++x) {
-                const bool checker = (((x >> 4) ^ ((y + row) >> 4)) & 1) != 0;
-                dst[x] = checker ? gv::color::White : gv::color::Blue;
-            }
-        }
-
-        display.drawBitmap565(0, y, kAssetW, rows, s_titleSlab);
-    }
-
-    drawnFull_ = true;
-}
-
 void TitleState::onEnter(App& app) {
     if (!loadTitleAsset(app.platform().fs(), GV_ASSETS_DIR "/title.rgb565")) {
-        app.statusOverlay().addWarning("title.rgb565 missing");
-        app.statusOverlay().addInfo("Using placeholder pattern");
+        app.statusOverlay().addWarning("File missing: title.rgb565");
+        app.statusOverlay().addInfo("Is SD card inserted?");
     }
 }
 
@@ -128,44 +104,46 @@ void TitleState::onExit(App& app) {
 }
 
 void TitleState::update(App& app, const InputState& in, uint32_t dtUs) {
-    (void)app;
     (void)dtUs;
 
     if (in.thrustPressed || in.confirm) {
-        accepted_ = true;
-    }
-
-    if (accepted_) {
         app.showHomeMenu();
     }
 }
 
-void TitleState::render(App& app, IDisplay& display, RenderList& rl) {
+void TitleState::renderDirect(App& app, IDisplay& display) {
     (void)app;
-    (void)rl;
 
-    if (assetMissing_ || !file_) {
-        drawPlaceholderPattern(display);
-        return;
-    }
+    auto buildPlaceholderSlab = [&](int y, int rows) {
+        for (int row = 0; row < rows; ++row) {
+            uint16_t* dst = s_titleSlab + row * kAssetW;
+            for (int x = 0; x < kAssetW; ++x) {
+                const bool checker = (((x >> 4) ^ ((y + row) >> 4)) & 1) != 0;
+                dst[x] = checker ? gv::color::White : gv::color::Blue;
+            }
+        }
+    };
 
     if (!drawnFull_) {
-        if (!file_->seek(0)) {
-            assetMissing_ = true;
-            drawPlaceholderPattern(display);
-            return;
+        if (!assetMissing_ && file_) {
+            if (!file_->seek(0)) {
+                assetMissing_ = true;
+            }
         }
 
         for (int y = 0; y < kAssetH; y += kSlabRows) {
             const int rows = ((y + kSlabRows) <= kAssetH) ? kSlabRows : (kAssetH - y);
-            const size_t bytesToRead = size_t(kAssetW * rows * sizeof(uint16_t));
 
-            size_t got = 0;
-            if (!file_->read(s_titleSlab, bytesToRead, got) || got != bytesToRead) {
-                assetMissing_ = true;
-                drawnFull_ = false;
-                drawPlaceholderPattern(display);
-                return;
+            if (!assetMissing_ && file_) {
+                const size_t bytesToRead = size_t(kAssetW * rows * sizeof(uint16_t));
+                size_t got = 0;
+
+                if (!file_->read(s_titleSlab, bytesToRead, got) || got != bytesToRead) {
+                    assetMissing_ = true;
+                    buildPlaceholderSlab(y, rows);
+                }
+            } else {
+                buildPlaceholderSlab(y, rows);
             }
 
             display.drawBitmap565(0, y, kAssetW, rows, s_titleSlab);
@@ -201,17 +179,29 @@ void TitleState::render(App& app, IDisplay& display, RenderList& rl) {
     if (y0 < 0) y0 = 0;
     if (y0 > (kAssetH - promptH)) y0 = kAssetH - promptH;
 
-    const size_t stripOffset = size_t(y0) * size_t(kAssetW) * sizeof(uint16_t);
-    const size_t stripBytes  = size_t(kAssetW * promptH * sizeof(uint16_t));
+    bool usingAssetPrompt = false;
 
-    if (!file_->seek(stripOffset)) return;
+    if (!assetMissing_ && file_) {
+        const size_t stripOffset = size_t(y0) * size_t(kAssetW) * sizeof(uint16_t);
+        const size_t stripBytes  = size_t(kAssetW * promptH * sizeof(uint16_t));
 
-    size_t got = 0;
-    if (!file_->read(s_titleSlab, stripBytes, got) || got != stripBytes) {
-        return;
+        if (!file_->seek(stripOffset)) {
+            assetMissing_ = true;
+        } else {
+            size_t got = 0;
+            if (!file_->read(s_titleSlab, stripBytes, got) || got != stripBytes) {
+                assetMissing_ = true;
+            } else {
+                usingAssetPrompt = true;
+            }
+        }
     }
 
-    const uint16_t fg = gv::color::White;
+    if (!usingAssetPrompt) {
+        buildPlaceholderSlab(y0, promptH);
+    }
+
+    const uint16_t fg = usingAssetPrompt ? gv::color::White : gv::color::Red;
     for (int row = 0; row < promptH; ++row) {
         uint16_t* dstRow = s_titleSlab + row * kAssetW;
         for (int col = 0; col < promptW; ++col) {

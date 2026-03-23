@@ -1,7 +1,6 @@
 #include "SavedGamesState.hpp"
 #include "App.hpp"
 #include "render/RenderList.hpp"
-#include "StatusOverlayView.hpp"
 #include "render/Colors.hpp"
 
 namespace gv {
@@ -88,7 +87,7 @@ void SavedGamesState::update(App& app, const InputState& in, uint32_t dtUs) {
     }
 }
 
-void SavedGamesState::render(App& app, IDisplay& display, RenderList& rl) {
+void SavedGamesState::render(App& app, RenderList& rl) {
     rl.clear();
 
     const int w = app.displayWidth();
@@ -115,17 +114,6 @@ void SavedGamesState::render(App& app, IDisplay& display, RenderList& rl) {
     } else {
         rl.addText(&help_, 16, 180, gv::color::Gray);
     }
-
-    StatusOverlayView::appendTo(
-        rl,
-        app.statusOverlay(),
-        app.displayWidth(),
-        app.displayHeight()
-    );
-
-    display.beginFrame();
-    display.draw(rl);
-    display.endFrame();
 }
 
 } // namespace gv

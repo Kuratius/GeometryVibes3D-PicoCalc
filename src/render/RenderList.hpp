@@ -55,7 +55,7 @@ struct RenderList {
     static constexpr std::size_t LINE_CAP      = 3144;
     static constexpr std::size_t FILLRECT_CAP  = 128;
     static constexpr std::size_t SPRITE_CAP    = 128;
-    static constexpr std::size_t TEXT_CAP      = 64;
+    static constexpr std::size_t TEXT_CAP      = 24;
 
     void clear() {
         lines_.clear();

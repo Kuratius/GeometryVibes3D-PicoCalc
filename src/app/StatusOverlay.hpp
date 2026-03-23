@@ -36,14 +36,13 @@ public:
 
     const gv::StaticVector<OverlayLine, LINE_CAP>& lines() const { return lines_; }
 
-    const Text& footerRightText() const { return footerRightText_; }
-    uint16_t footerRightColor() const { return footerRightColor565_; }
+    const Text& footerRightText() const { return footerRight_.text; }
+    uint16_t footerRightColor() const { return footerRight_.color565; }
     bool hasFooterRight() const { return hasFooterRight_; }
 
 private:
     gv::StaticVector<OverlayLine, LINE_CAP> lines_{};
-    Text footerRightText_{};
-    uint16_t footerRightColor565_ = gv::color::White; 
+    OverlayLine footerRight_{};
     bool hasFooterRight_ = false;
     bool visible_ = false;
 };

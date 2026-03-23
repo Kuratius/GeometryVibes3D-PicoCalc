@@ -1,7 +1,6 @@
 #include "OptionsState.hpp"
 #include "App.hpp"
 #include "render/RenderList.hpp"
-#include "StatusOverlayView.hpp"
 #include "render/Colors.hpp"
 #include <cstdio>
 
@@ -62,7 +61,7 @@ void OptionsState::update(App& app, const InputState& in, uint32_t dtUs) {
     }
 }
 
-void OptionsState::render(App& app, IDisplay& display, RenderList& rl) {
+void OptionsState::render(App& app, RenderList& rl) {
     rl.clear();
 
     const int w = app.displayWidth();
@@ -84,17 +83,6 @@ void OptionsState::render(App& app, IDisplay& display, RenderList& rl) {
     }
 
     rl.addText(&help_, 16, 180, gv::color::Gray);
-
-    StatusOverlayView::appendTo(
-        rl,
-        app.statusOverlay(),
-        app.displayWidth(),
-        app.displayHeight()
-    );
-
-    display.beginFrame();
-    display.draw(rl);
-    display.endFrame();
 }
 
 } // namespace gv

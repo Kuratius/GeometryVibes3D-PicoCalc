@@ -13,8 +13,8 @@ class IAppState {
 public:
     virtual ~IAppState() = default;
 
-    virtual void onEnter(App& app) {}
-    virtual void onExit(App& app) {}
+    virtual void onEnter(App& app) { (void)app; }
+    virtual void onExit(App& app) { (void)app; }
 
     virtual void update(App& app, const InputState& in, uint32_t dtUs) = 0;
     

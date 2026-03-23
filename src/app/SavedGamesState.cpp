@@ -42,6 +42,7 @@ void SavedGamesState::update(App& app, const InputState& in, uint32_t dtUs) {
         if (in.confirm) {
             if (!app.deleteSave(selected_)) {
                 app.statusOverlay().addWarning("Could not delete save");
+                app.statusOverlay().addInfo("Is SD card inserted?");
             }
             confirmDelete_ = false;
             rebuildTexts(app);
@@ -75,6 +76,7 @@ void SavedGamesState::update(App& app, const InputState& in, uint32_t dtUs) {
     if (in.confirm || in.thrustPressed) {
         if (!app.selectSave(selected_)) {
             app.statusOverlay().addWarning("Could not load save");
+            app.statusOverlay().addInfo("Is SD card inserted?");
             return;
         }
         app.showLevelSelect();

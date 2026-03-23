@@ -60,8 +60,10 @@ void NewGameState::update(App& app, const InputState& in, uint32_t dtUs) {
             return;
         }
 
-        if (!app.createNewSave(name_.data())) {
+        if (!app.saveSaves() || !app.createNewSave(name_.data())) {
             app.statusOverlay().addWarning("Could not create save");
+            app.statusOverlay().addInfo("Is SD card inserted?");
+            app.showHomeMenu();
             return;
         }
 

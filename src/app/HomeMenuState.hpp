@@ -31,7 +31,7 @@ private:
     std::size_t selected_ = 0;
 
     Text title_{ "HOME" };
-    std::array<Text, Count> items_{
+    std::array<Text, Item::Count> items_{
         Text{"Continue"},
         Text{"Saved Games"},
         Text{"New Game"},

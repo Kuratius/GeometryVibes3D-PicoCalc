@@ -16,10 +16,6 @@ static inline Vec3fx sub3(const Vec3fx& a, const Vec3fx& b) {
 
 #if GV_FAST_NORMALIZE
 
-// Refines a scaled sqrt/rsqrt-style estimate using shift/add multiplicative updates.
-// Invariant: accepted updates multiply `y` by (1 + 2^-i) and `xyy` by roughly (1 + 2^-i)^2,
-// preserving the normalized relationship needed for the final correction step.
-// The return value is a scaled estimate used by normalize32(); see sqrt64Helper() for setup.
 static uint32_t sqrtCore(uint32_t xyy, uint32_t y) {
     //this can be reused for a sqrt instead of rsqrt
     //by setting y to the correct value
@@ -59,12 +55,6 @@ static uint32_t sqrtCore(uint32_t xyy, uint32_t y) {
     return (y - (hi >> 1)); //but then this underflows so they cancel
 }
 
-
-// Normalize a nonzero 64-bit magnitude for sqrtCore().
-// The input is shifted so its top set bit lands on an even exponent near bit 30,
-// which keeps the square-root scaling exact under exponent halving.
-// `*exp` receives the exponent adjustment needed to rescale the returned value
-// back to the original magnitude domain.
 static inline uint32_t sqrt64Helper(uint64_t m, int* exp) {
     int clz = __builtin_clzll(m);
     int ilog2 = 63 - clz;

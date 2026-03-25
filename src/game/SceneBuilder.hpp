@@ -123,6 +123,9 @@ private:
 
     void trailDraw(RenderList& rl, const Camera& cam,
                    const TrailState& trail, fx scrollX, uint16_t color) const;
+
+private:
+    void addParallaxStarfield(RenderList& rl, const Camera& cam, fx scrollX) const;
 };
 
 } // namespace gv

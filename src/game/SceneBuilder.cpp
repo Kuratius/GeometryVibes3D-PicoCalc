@@ -9,6 +9,17 @@
 
 namespace gv {
 
+static constexpr uint16_t kBgStarFar  = gv::color::rgb565(64, 72, 96);
+static constexpr uint16_t kBgStarMid  = gv::color::rgb565(140, 160, 180);
+static constexpr uint16_t kBgStarNear = gv::color::White;
+
+struct BgStar3D {
+    fx levelX;
+    fx y;
+    fx z;
+    uint16_t color565;
+};
+
 static constexpr fx fi(int v) { return fx::fromInt(v); }
 
 static inline Vec3fx add3(const Vec3fx& a, const Vec3fx& b) {
@@ -35,6 +46,10 @@ static inline uint32_t xorshift32(uint32_t& s) {
 static inline int randRange(uint32_t& s, int lo, int hi) {
     const uint32_t span = uint32_t(hi - lo + 1);
     return lo + int(xorshift32(s) % span);
+}
+
+static inline fx fxFromIntRange(uint32_t& s, int lo, int hi) {
+    return fi(randRange(s, lo, hi));
 }
 
 static inline fx fxFromMilli(int v) {
@@ -302,6 +317,45 @@ void SceneBuilder::trailDraw(RenderList& rl, const Camera& cam,
         ++idx;
         if (idx >= kTrailMax) idx = 0;
     }
+}
+
+void SceneBuilder::addParallaxStarfield(RenderList& rl, const Camera& cam, fx scrollX) const {
+    static constexpr int kFarCount  = 48;
+    static constexpr int kMidCount  = 24;
+    static constexpr int kNearCount = 12;
+
+    static constexpr fx kWrap = fi(1440);
+    static constexpr fx kSpan = fi(2880);
+
+    uint32_t seed = 0xC0FFEE23u;
+
+    auto emitLayer = [&](int count, int xLo, int xHi, int yLo, int yHi,
+                         int zLo, int zHi, uint16_t color) {
+        for (int i = 0; i < count; ++i) {
+            fx levelX = fxFromIntRange(seed, xLo, xHi);
+            fx y      = fxFromIntRange(seed, yLo, yHi);
+            fx z      = fxFromIntRange(seed, zLo, zHi);
+
+            fx relX = levelX - scrollX;
+
+            while (relX < -kWrap) relX += kSpan;
+            while (relX >  kWrap) relX -= kSpan;
+
+            const fx worldX = relX + fi(kShipFixedX);
+            const Vec3fx p{ worldX, y, z };
+
+            Vec2i pt{};
+            if (!projectPoint(cam, p, pt)) {
+                continue;
+            }
+
+            rl.addLine(pt.x, pt.y, pt.x, pt.y, color);
+        }
+    };
+
+    emitLayer(kFarCount,  -1440, 1440, -120, 120, -240, -200, kBgStarFar);
+    emitLayer(kMidCount,  -1440, 1440, -100, 100, -170, -130, kBgStarMid);
+    emitLayer(kNearCount, -1440, 1440,  -80,  80, -110,  -80, kBgStarNear);
 }
 
 void SceneBuilder::buildCollisionDebug(RenderList& rl, const Camera& cam, const Game& game) const {
@@ -609,6 +663,8 @@ void SceneBuilder::buildScene(RenderList& rl,
     const uint16_t kStar   = gv::color::Yellow;
 
     if (!game.hasLevel()) return;
+
+    addParallaxStarfield(rl, cam, scrollX);
 
     const LevelHeader& hdr = game.levelHeader();
     const uint16_t obstacleColor = (hdr.obstacleColor565 != 0) ? hdr.obstacleColor565 : gv::color::Green;

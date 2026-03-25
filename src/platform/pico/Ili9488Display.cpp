@@ -9,7 +9,7 @@
 #include <cstdio>
 #include <cstring>
 
-#define GV_TIME_CRITICAL(x) __no_inline_not_in_flash_func(x) 
+#define GV_TIME_CRITICAL(x) __no_inline_not_in_flash_func(x)
 
 namespace gv {
 
@@ -826,7 +826,7 @@ void GV_TIME_CRITICAL(Ili9488Display::drawLineYMajorIntoSlab)(
     }
 }
 
-void Ili9488Display::drawFillRectIntoSlab(uint16_t* slab, int slabY0, int slabY1, const FillRectInst& inst) {
+void GV_TIME_CRITICAL(Ili9488Display::drawFillRectIntoSlab)(uint16_t* slab, int slabY0, int slabY1, const FillRectInst& inst) {
     const int dstX0 = inst.x;
     const int dstY0 = inst.y;
     const int dstX1 = dstX0 + inst.w - 1;

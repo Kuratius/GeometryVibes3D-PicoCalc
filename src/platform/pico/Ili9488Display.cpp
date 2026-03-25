@@ -9,6 +9,32 @@
 #include <cstdio>
 #include <cstring>
 
+static constexpr uint PIN_PROBE_CORE0 = 2;
+static constexpr uint PIN_PROBE_CORE1 = 3;
+static constexpr uint PIN_PROBE_DMA   = 21;
+
+#define GV_TEST 0
+#if GV_TEST
+#define GV_TIME_CRITICAL(x) __no_inline_not_in_flash_func(x) 
+#else
+#define GV_TIME_CRITICAL(x) x
+#endif
+
+
+static inline void probe_init(uint pin) {
+    gpio_init(pin);
+    gpio_set_dir(pin, GPIO_OUT);
+    gpio_put(pin, 0);
+}
+
+static inline void probe_on(uint pin) {
+    gpio_put(pin, 1);
+}
+
+static inline void probe_off(uint pin) {
+    gpio_put(pin, 0);
+}
+
 namespace gv {
 
 static uint g_baud = 0;
@@ -100,6 +126,8 @@ void Ili9488Display::beginFrame() {
 void Ili9488Display::draw(const RenderList& rl) {
     initIfNeeded();
 
+    probe_on(PIN_PROBE_CORE0);
+
     Frame& f = s_frame[(int)s_prod];
     f.lineCount = 0;
     f.fillRectCount = 0;
@@ -139,6 +167,9 @@ void Ili9488Display::draw(const RenderList& rl) {
     binFrameLines(f);
     binFrameFillRects(f);
     binFrameTexts(f);
+
+    probe_off(PIN_PROBE_CORE0);
+
     if (s_serialOutputEnabled) {
         lastLines  = f.lineCount;
         lastBinned = f.lineBinnedTotal;
@@ -273,6 +304,10 @@ void Ili9488Display::initIfNeeded() {
     gpio_init(PIN_CS);  gpio_set_dir(PIN_CS, GPIO_OUT);  gpio_put(PIN_CS, 1);
     gpio_init(PIN_DC);  gpio_set_dir(PIN_DC, GPIO_OUT);  gpio_put(PIN_DC, 1);
     gpio_init(PIN_RST); gpio_set_dir(PIN_RST, GPIO_OUT); gpio_put(PIN_RST, 1);
+
+    probe_init(PIN_PROBE_CORE0);
+    probe_init(PIN_PROBE_CORE1);
+    probe_init(PIN_PROBE_DMA);
 
     lcdReset();
     lcdInit();
@@ -626,7 +661,9 @@ inline void Ili9488Display::plotSlab(uint16_t* slab, int x, int yLocal, uint16_t
     slab[yLocal * W + x] = c565;
 }
 
-void Ili9488Display::drawLineIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln) {
+
+void GV_TIME_CRITICAL(Ili9488Display::drawLineIntoSlab)(
+    uint16_t* slab, int slabY0, int slabY1, const Line& ln) {
     const int dx = iabs_i32((int)ln.x1 - (int)ln.x0);
     const int dy = iabs_i32((int)ln.y1 - (int)ln.y0);
 
@@ -637,7 +674,8 @@ void Ili9488Display::drawLineIntoSlab(uint16_t* slab, int slabY0, int slabY1, co
     }
 }
 
-void Ili9488Display::drawLineXMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln) {
+void GV_TIME_CRITICAL(Ili9488Display::drawLineXMajorIntoSlab)(
+    uint16_t* slab, int slabY0, int slabY1, const Line& ln) {
     int x0 = ln.x0;
     int y0 = ln.y0;
     int x1 = ln.x1;
@@ -756,7 +794,8 @@ void Ili9488Display::drawLineXMajorIntoSlab(uint16_t* slab, int slabY0, int slab
     }
 }
 
-void Ili9488Display::drawLineYMajorIntoSlab(uint16_t* slab, int slabY0, int slabY1, const Line& ln) {
+void GV_TIME_CRITICAL(Ili9488Display::drawLineYMajorIntoSlab)(
+    uint16_t* slab, int slabY0, int slabY1, const Line& ln) {
     int x0 = ln.x0;
     int y0 = ln.y0;
     int x1 = ln.x1;
@@ -866,7 +905,8 @@ static inline uint16_t blend565(uint16_t dst, uint16_t src, uint8_t a) {
     return uint16_t((r << 11) | (g << 5) | b);
 }
 
-void Ili9488Display::drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, const TextInst& inst) {
+void GV_TIME_CRITICAL(Ili9488Display::drawTextIntoSlab)(
+    uint16_t* slab, int slabY0, int slabY1, const TextInst& inst) {
     const Text* text = inst.text;
     if (!text) return;
 
@@ -958,6 +998,8 @@ void Ili9488Display::drawTextIntoSlab(uint16_t* slab, int slabY0, int slabY1, co
 }
 
 void Ili9488Display::renderAndFlushFrame(const Frame& f) {
+    probe_on(PIN_PROBE_CORE1);
+
     setAddrWindow(0, 0, W - 1, H - 1);
 
     gpio_put(PIN_DC, 1);
@@ -1005,9 +1047,11 @@ void Ili9488Display::renderAndFlushFrame(const Frame& f) {
 
         if (slabIndex != 0) {
             wait_for_spi_dma_idle();
+            probe_off(PIN_PROBE_DMA);
         }
 
         start_dma_slab(slab, W * rows);
+        probe_on(PIN_PROBE_DMA);
         ping ^= 1;
     }
 
@@ -1015,6 +1059,7 @@ void Ili9488Display::renderAndFlushFrame(const Frame& f) {
 
     spi_set_format(spi1, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
     gpio_put(PIN_CS, 1);
+    probe_off(PIN_PROBE_CORE1);
 }
 
 void Ili9488Display::core1_entry() {

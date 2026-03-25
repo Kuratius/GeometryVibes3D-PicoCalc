@@ -699,6 +699,7 @@ bool Game::checkStaticCollisionCell(
 }
 
 bool Game::checkCollisionAt(fx shipY) {
+    return false;
     const fx sy = shipY;
     const fx sx = fx::fromInt(kShipFixedX);
     const fx r = fx::fromInt(kCellSize / 4);

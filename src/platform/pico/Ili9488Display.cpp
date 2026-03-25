@@ -13,7 +13,7 @@ static constexpr uint PIN_PROBE_CORE0 = 2;
 static constexpr uint PIN_PROBE_CORE1 = 3;
 static constexpr uint PIN_PROBE_DMA   = 21;
 
-#define GV_TEST 0
+#define GV_TEST 1
 #if GV_TEST
 #define GV_TIME_CRITICAL(x) __no_inline_not_in_flash_func(x) 
 #else
@@ -997,7 +997,7 @@ void GV_TIME_CRITICAL(Ili9488Display::drawTextIntoSlab)(
     }
 }
 
-void Ili9488Display::renderAndFlushFrame(const Frame& f) {
+void GV_TIME_CRITICAL(Ili9488Display::renderAndFlushFrame)(const Frame& f) {
     probe_on(PIN_PROBE_CORE1);
 
     setAddrWindow(0, 0, W - 1, H - 1);

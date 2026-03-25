@@ -73,6 +73,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(GeometryVibes3D-PicoCalc PRIVATE GV3D_TESTING)
 endif()
 
+# Make peripheral clock track system clock changes instead of falling back to fixed 48 MHz.
+target_compile_definitions(GeometryVibes3D-PicoCalc PRIVATE PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1)
+
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(GeometryVibes3D-PicoCalc 0)
 pico_enable_stdio_usb(GeometryVibes3D-PicoCalc 1)

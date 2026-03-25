@@ -3,6 +3,7 @@
 #include "PicoFileSystem.hpp"
 #include "PicoInput.hpp"
 #include "PicoSouthbridge.hpp"
+#include "hardware/clocks.h"
 #include "pico/stdlib.h"
 
 namespace gv {
@@ -10,6 +11,7 @@ namespace gv {
 class PicoPlatform : public IPlatform {
 public:
     void init() override {
+        set_sys_clock_khz(150'000, true); // 150 MHz
         stdio_init_all();
         sleep_ms(500);
         last_ = time_us_64();

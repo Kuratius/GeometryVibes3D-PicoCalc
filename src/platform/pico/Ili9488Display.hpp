@@ -32,7 +32,7 @@ public:
     static constexpr int SLAB_ROWS = 8;
 
 private:
-    static constexpr unsigned SPI_BAUD_HZ = 62'500'000;
+    static constexpr unsigned SPI_BAUD_HZ = 75'000'000;
 
     static constexpr int PIN_SCK  = 10;
     static constexpr int PIN_MOSI = 11;

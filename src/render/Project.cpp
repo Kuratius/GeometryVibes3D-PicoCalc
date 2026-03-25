@@ -30,7 +30,8 @@ static inline uint32_t uxth(uint32_t a){
 
 static inline int64_t smul48_C(int32_t n, int32_t m){
 //signed 32x16->48-bit multiply
-//m must fit in 16-bit
+//m must fit in 15-bit
+//due to sign extension shenanigans
     int64_t temp=(int64_t)((n>>16)*m)<<16;
     temp+=(int32_t)uxth(n)*m;
     return temp;

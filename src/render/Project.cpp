@@ -315,7 +315,7 @@ bool projectPoint(const Camera& cam, const Vec3fx& world, Vec2i& out) {
     int32_t yt=y.raw();
 #ifdef USE_HIGH_ACCURACY
     int32_t ytf=(smul48_C(yt,focal)<<16)/z.raw();
-    out.x = (int16_t)roundNearest(cam.cy.raw() - ytf, 16);
+    out.y = (int16_t)roundNearest(cam.cy.raw() - ytf, 16);
 #else
     //this branch requires focal < 1024
     int32_t ytf=(((yt>>10)*focal))/zt;

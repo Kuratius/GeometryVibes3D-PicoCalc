@@ -14,7 +14,7 @@ static inline Vec3fx sub3(const Vec3fx& a, const Vec3fx& b) {
     return Vec3fx{ a.x - b.x, a.y - b.y, a.z - b.z };
 }
 
-static inline uint32_t uxth(uint32_t a){
+static inline uint32_t uxth(uint32_t a) {
     //this is a workaround for a compiler bug affecting up to GCC 15.2
     if (__builtin_constant_p(a))
         return (uint16_t)a;
@@ -28,23 +28,21 @@ static inline uint32_t uxth(uint32_t a){
     return b;
 }
 
-static inline int64_t smul48_i16(int32_t n, int16_t m){
+static inline int64_t smul48_i16(int32_t n, int16_t m) {
 //signed 32x16->48-bit multiply
     int64_t temp=(int64_t)((n>>16)*m)<<16;
     temp+=(int32_t)uxth(n)*m;
     return temp;
 }
 
-static inline uint64_t umul48_u16(uint32_t n, uint16_t m){
+static inline uint64_t umul48_u16(uint32_t n, uint16_t m) {
 //unsigned 32x16->48-bit multiply
     uint64_t temp=uxth(n)*m;
     temp+=(uint64_t)((n>>16)*m)<<16;
     return temp;
 }
 
-static inline int32_t roundNearest(int32_t a, const int shift)
-{
-
+static inline int32_t roundNearest(int32_t a, const int shift) {
     //asrs doesnt update carry flag for shift by 0
     //this branch should get pruned, but it is important
     //if you want to reuse this code elsewhere

@@ -15,7 +15,7 @@ static inline Vec3fx sub3(const Vec3fx& a, const Vec3fx& b) {
 }
 
 static inline uint32_t uxth(uint32_t a){
-    //this is a workaround for a compiler bug
+    //this is a workaround for a compiler bug affecting up to GCC 15.2
     if (__builtin_constant_p(a))
         return (uint16_t)a;
 
@@ -28,18 +28,15 @@ static inline uint32_t uxth(uint32_t a){
     return b;
 }
 
-static inline int64_t smul48_C(int32_t n, int32_t m){
+static inline int64_t smul48_i16(int32_t n, int16_t m){
 //signed 32x16->48-bit multiply
-//m must fit in 15-bit
-//due to sign extension shenanigans
     int64_t temp=(int64_t)((n>>16)*m)<<16;
     temp+=(int32_t)uxth(n)*m;
     return temp;
 }
 
-static inline uint64_t umul48_C(uint32_t n, uint32_t m){
+static inline uint64_t umul48_u16(uint32_t n, uint16_t m){
 //unsigned 32x16->48-bit multiply
-//m must fit in 16-bit
     uint64_t temp=uxth(n)*m;
     temp+=(uint64_t)((n>>16)*m)<<16;
     return temp;
@@ -153,7 +150,7 @@ static void normalize32(int32_t* a) {
         if (t < 0)
             tu = -tu;
         //32x16->48 bit multiply
-        uint64_t prod=umul48_C(tu, res);
+        uint64_t prod=umul48_u16(tu, res);
         prod = (exp >= 0) ? (prod >> exp) : (prod << -exp);
         int32_t sprod = (int32_t)prod;
         if (t < 0)
@@ -304,17 +301,17 @@ bool projectPoint(const Camera& cam, const Vec3fx& world, Vec2i& out) {
 
     int32_t xt=x.raw();
 #ifdef USE_HIGH_ACCURACY
-    int32_t xtf=(smul48_C(xt,focal)<<16)/z.raw();
-    out.x = (int16_t)roundNearest( cam.cx.raw() + xtf, 16);
+    int32_t xtf=(smul48_i16(xt,focal)<<16)/z.raw();
+    out.x = (int16_t)roundNearest(cam.cx.raw() + xtf, 16);
 #else
-    //this branch requires focal <1024
+    //this branch requires focal < 1024
     int32_t xtf=(((xt>>10)*focal))/zt;
     out.x = (int16_t)roundNearest((cam.cx.raw()>>10) + xtf, 6);
 #endif
 
     int32_t yt=y.raw();
 #ifdef USE_HIGH_ACCURACY
-    int32_t ytf=(smul48_C(yt,focal)<<16)/z.raw();
+    int32_t ytf=(smul48_i16(yt,focal)<<16)/z.raw();
     out.y = (int16_t)roundNearest(cam.cy.raw() - ytf, 16);
 #else
     //this branch requires focal < 1024

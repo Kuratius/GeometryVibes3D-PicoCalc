@@ -14,6 +14,65 @@ static inline Vec3fx sub3(const Vec3fx& a, const Vec3fx& b) {
     return Vec3fx{ a.x - b.x, a.y - b.y, a.z - b.z };
 }
 
+static inline uint32_t uxth(uint32_t a) {
+    //this is a workaround for a compiler bug affecting up to GCC 15.2
+    if (__builtin_constant_p(a))
+        return (uint16_t)a;
+
+    uint32_t b;
+    asm("uxth    %[b], %[a]"
+    :[b]"=l"(b)
+    :[a]"l"(a)
+    ://no clobber
+    );
+    return b;
+}
+
+static inline int64_t smul48_i16(int32_t n, int16_t m) {
+//signed 32x16->48-bit multiply
+    int64_t temp=(int64_t)((n>>16)*m)<<16;
+    temp+=(int32_t)uxth(n)*m;
+    return temp;
+}
+
+static inline uint64_t umul48_u16(uint32_t n, uint16_t m) {
+//unsigned 32x16->48-bit multiply
+    uint64_t temp=uxth(n)*m;
+    temp+=(uint64_t)((n>>16)*m)<<16;
+    return temp;
+}
+
+static inline int32_t roundNearest(int32_t a, const int shift) {
+    //asrs doesnt update carry flag for shift by 0
+    //this branch should get pruned, but it is important
+    //if you want to reuse this code elsewhere
+    if (shift<=0)
+        return a << -shift;
+    //compiler can't run assembly code
+    if (__builtin_constant_p(a))
+        return (int32_t)(((int64_t)a+(1<<(shift-1)))>>shift);
+
+    //round to nearest, ties to positive infinity
+    asm(".syntax unified\n\t"
+        "asrs    %[a], %[a], %[shift]\n\t"
+        "adcs    %[a], %[a], %[zero]"
+    :[a]"+&l"(a)//output
+    :[shift]"lI"(shift), [zero]"l"(0)//inputs
+    :"cc" //clobber
+    );
+    //note:
+    //asrs sets the carry flag based on the last digit
+    //that was shifted out
+    //"lI" means the compiler
+    //can choose between immediate value and  a low register (r0-r7)
+    //adc on thumb does not support an immediate value
+    //hence the "l" constraint instead of I
+    //+l means the register is both input and output
+    //+&l prevents input regs from overlapping with it
+    //(important for multi-line statements)
+    return a;
+}
+
 #if GV_FAST_NORMALIZE
 
 static uint32_t sqrtCore(uint32_t xyy, uint32_t y) {
@@ -89,8 +148,7 @@ static void normalize32(int32_t* a) {
         if (t < 0)
             tu = -tu;
         //32x16->48 bit multiply
-        uint64_t prod = ((tu << 16) >> 16) * res;
-        prod += (uint64_t)((tu >> 16) * res) << 16;
+        uint64_t prod=umul48_u16(tu, res);
         prod = (exp >= 0) ? (prod >> exp) : (prod << -exp);
         int32_t sprod = (int32_t)prod;
         if (t < 0)
@@ -226,56 +284,40 @@ void buildCameraBasis(Camera& cam) {
     cam.up2   = cross3Normal(cam.right, cam.fwd);
 }
 
-static inline int32_t roundNearest(int32_t a)
-{
-    const int shift=16;
-    //asrs doesnt update carry flag for shift by 0
-    //this branch should get pruned, but it is important
-    //if you want to reuse this code elsewhere
-    if (shift<=0)
-        return a;
-    //compiler can't run assembly code
-    if (__builtin_constant_p(a))
-        return (int32_t)(((int64_t)a+(1<<(shift-1)))>>shift);
-
-    //round to nearest, ties to positive infinity
-    asm(".syntax unified\n\t"
-        "asrs    %[a], %[a], %[shift]\n\t"
-        "adcs    %[a], %[a], %[zero]"
-    :[a]"+&l"(a)//output
-    :[shift]"lI"(shift), [zero]"l"(0)//inputs
-    :"cc" //clobber
-    );
-    //note:
-    //asrs sets the carry flag based on the last digit
-    //that was shifted out
-    //"lI" means the compiler
-    //can choose between immediate value and  a low register (r0-r7)
-    //adc on thumb does not support an immediate value
-    //hence the "l" constraint instead of I
-    //+l means the register is both input and output
-    //+&l prevents input regs from overlapping with it
-    //(important for multi-line statements)
-    return a;
-}
-
 bool projectPoint(const Camera& cam, const Vec3fx& world, Vec2i& out) {
     // Transform world -> view using precomputed basis
     Vec3fx v = sub3(world, cam.pos);
+    fx z = projectNormal3(v, cam.fwd);
+    int32_t zt=z.raw();
+    zt>>=16;
+    //early return
+    if (unlikely(zt < 1)) return false;
+
     fx x = projectNormal3(v, cam.right);
     fx y = projectNormal3(v, cam.up2);
-    fx z = projectNormal3(v, cam.fwd);
+    int32_t focal=cam.focal.raw()>>16;//focal is an integer
 
-    if (z.raw() <= (1 << fx::SHIFT) / 8) return false;
+    int32_t xt=x.raw();
+#ifdef USE_HIGH_ACCURACY
+    int32_t xtf=(smul48_i16(xt,focal)<<16)/z.raw();
+    out.x = (int16_t)roundNearest(cam.cx.raw() + xtf, 16);
+#else
+    //this branch requires focal < 1024
+    int32_t xtf=(((xt>>10)*focal))/zt;
+    out.x = (int16_t)roundNearest((cam.cx.raw()>>10) + xtf, 6);
+#endif
 
-    fx invz = cam.focal / z;
-    fx sx = cam.cx + x * invz;
-    fx sy = cam.cy - y * invz;
-
-
-    out.x = (int16_t)roundNearest(sx.raw());
-    out.y = (int16_t)roundNearest(sy.raw());
+    int32_t yt=y.raw();
+#ifdef USE_HIGH_ACCURACY
+    int32_t ytf=(smul48_i16(yt,focal)<<16)/z.raw();
+    out.y = (int16_t)roundNearest(cam.cy.raw() - ytf, 16);
+#else
+    //this branch requires focal < 1024
+    int32_t ytf=(((yt>>10)*focal))/zt;
+    out.y = (int16_t)roundNearest((cam.cy.raw()>>10) - ytf, 6);
+#endif
     return true;
 }
+
 
 } // namespace gv

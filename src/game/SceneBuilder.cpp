@@ -56,13 +56,6 @@ static inline fx fxFromMilli(int v) {
     return fx::fromRaw((v * (1 << fx::SHIFT)) / 1000);
 }
 
-static inline void turnsToSinCos(fx turns, fx& c, fx& s) {
-    const double t = double(turns.raw()) / double(1 << fx::SHIFT);
-    const double a = t * 6.28318530717958647692;
-    c = fx::fromRaw(int32_t(std::lround(std::cos(a) * double(1 << fx::SHIFT))));
-    s = fx::fromRaw(int32_t(std::lround(std::sin(a) * double(1 << fx::SHIFT))));
-}
-
 static inline Vec3fx makeVec3(fx x, fx y, fx z) {
     return Vec3fx{ x, y, z };
 }
@@ -573,7 +566,7 @@ void SceneBuilder::addStar(RenderList& rl,
 
     fx c = fx::one();
     fx s = fx::zero();
-    turnsToSinCos(spinTurns, c, s);
+    fx::sinCosTurns(spinTurns, c, s);
 
     for (std::size_t i = 0; i < edges.count; ++i) {
         Vec3fx a = edges.edges[i].a;
@@ -775,7 +768,7 @@ void SceneBuilder::buildScene(RenderList& rl,
 
                 fx groupCos = fx::one();
                 fx groupSin = fx::zero();
-                turnsToSinCos(angleTurns, groupCos, groupSin);
+                fx::sinCosTurns(angleTurns, groupCos, groupSin);
 
                 const Vec3fx groupPivot{
                     anchorX + gv::mulInt(halfCell, def.hdr.pivotHx),

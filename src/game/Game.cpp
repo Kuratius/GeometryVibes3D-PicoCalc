@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <string>
 
+namespace gv {
+
 namespace {
 
 constexpr const char* kControlsHintStart    = "START[SPACE]";
@@ -33,14 +35,6 @@ inline void applyGroupOffsetToAnchor(gv::OffsetMod gm, gv::fx& anchorX, gv::fx& 
     }
 }
 
-inline void turnsToSinCos(gv::fx turns, gv::fx& c, gv::fx& s) {
-    const double t = double(turns.raw()) / double(1 << gv::fx::SHIFT);
-    const double a = t * 6.28318530717958647692;
-
-    c = gv::fx::fromRaw(int32_t(std::lround(std::cos(a) * double(1 << gv::fx::SHIFT))));
-    s = gv::fx::fromRaw(int32_t(std::lround(std::sin(a) * double(1 << gv::fx::SHIFT))));
-}
-
 inline void inverseRotatePointAround(gv::fx& x, gv::fx& y,
                                             gv::fx ox, gv::fx oy,
                                             gv::fx c, gv::fx s) {
@@ -62,8 +56,16 @@ inline void inverseScalePointAround(gv::fx& x, gv::fx& y,
     y = oy + (y - oy) / scale;
 }
 
+static inline int ceilSqrtInt(int n) {
+    int r = 0;
+    while (r * r < n) {
+        ++r;
+    }
+    return r;
+}
+
 inline int computeAnimSearchPadCells(const gv::Game& game) {
-    int maxRadiusHalfCells = 0;
+    int maxRadiusSq = 0;
 
     for (std::size_t defIndex = 0; defIndex < game.animGroupDefs().size(); ++defIndex) {
         const gv::LoadedAnimGroupDef& def = game.animGroupDefs()[defIndex];
@@ -81,22 +83,20 @@ inline int computeAnimSearchPadCells(const gv::Game& game) {
             for (int k = 0; k < 4; ++k) {
                 const int dx = corners[k][0] - int(def.hdr.pivotHx);
                 const int dy = corners[k][1] - int(def.hdr.pivotHy);
-                const double dist = std::sqrt(double(dx * dx + dy * dy));
-                const int distCeil = int(std::ceil(dist));
+                const int dist2 = dx * dx + dy * dy;
 
-                if (distCeil > maxRadiusHalfCells) {
-                    maxRadiusHalfCells = distCeil;
+                if (dist2 > maxRadiusSq) {
+                    maxRadiusSq = dist2;
                 }
             }
         }
     }
 
+    const int maxRadiusHalfCells = ceilSqrtInt(maxRadiusSq);
     return (maxRadiusHalfCells + 1) / 2 + 1;
 }
 
 } // anon
-
-namespace gv {
 
 uint8_t Game::progressPercent() const {
     if (!hasLevel()) return 0;
@@ -555,7 +555,7 @@ bool Game::tryGetStarIndex(uint16_t targetCol, uint8_t targetRow, uint8_t& outIn
 }
 
 void Game::applyOffsetToAnchor(OffsetMod om, fx& anchorX, fx& anchorY) {
-    ::applyGroupOffsetToAnchor(om, anchorX, anchorY);
+    applyGroupOffsetToAnchor(om, anchorX, anchorY);
 }
 
 bool Game::checkPortalReached(fx shipY) const {
@@ -603,22 +603,22 @@ bool Game::checkAnimatedCollisionCell(const Column56& col, int row, fx sx, fx sy
 
     fx anchorX = cellCenterX;
     fx anchorY = worldYForRow(row) + halfCellFx();
-    ::applyGroupOffsetToAnchor(gm, anchorX, anchorY);
+    applyGroupOffsetToAnchor(gm, anchorX, anchorY);
 
     const fx angleTurns = animGroupAngleTurns_[defIndex];
     const fx groupScale = animGroupScale_[defIndex];
 
     fx gc = fx::one();
     fx gs = fx::zero();
-    ::turnsToSinCos(angleTurns, gc, gs);
+    fx::sinCosTurns(angleTurns, gc, gs);
 
     const fx groupPivotX = anchorX + mulInt(halfCellFx(), int(def.hdr.pivotHx));
     const fx groupPivotY = anchorY - mulInt(halfCellFx(), int(def.hdr.pivotHy));
 
     fx sxLocal = sx;
     fx syLocal = sy;
-    ::inverseRotatePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, gc, gs);
-    ::inverseScalePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, groupScale);
+    inverseRotatePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, gc, gs);
+    inverseScalePointAround(sxLocal, syLocal, groupPivotX, groupPivotY, groupScale);
 
     for (uint8_t i = 0; i < def.hdr.primitiveCount; ++i) {
         const AnimPrimitiveDef& p = animPrimitives_[def.firstPrimitive + i];
@@ -731,7 +731,7 @@ bool Game::checkCollisionAt(fx shipY) {
         staticRowB = t;
     }
 
-    const int animPadCells = ::computeAnimSearchPadCells(*this);
+    const int animPadCells = computeAnimSearchPadCells(*this);
 
     int animCol0 = staticColA - animPadCells;
     int animCol1 = staticColB + animPadCells;

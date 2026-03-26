@@ -53,6 +53,11 @@ struct fx {
     static constexpr fx one()  { return fx{(1 << SHIFT), raw_tag{}}; }
     static constexpr fx half() { return fx{(1 << (SHIFT - 1)), raw_tag{}}; }
 
+    // ---- trig (angles in turns: 0..1 == full revolution) ----
+    static fx cosTurns(fx turns);
+    static fx sinTurns(fx turns);
+    static void sinCosTurns(fx turns, fx& c, fx& s);
+
     // ---- arithmetic ----
     inline friend constexpr fx operator+(fx a, fx b) { return fx{ a.v + b.v, raw_tag{} }; }
     inline friend constexpr fx operator-(fx a, fx b) { return fx{ a.v - b.v, raw_tag{} }; }

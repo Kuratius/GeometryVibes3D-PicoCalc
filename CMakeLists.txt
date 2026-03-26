@@ -47,6 +47,7 @@ add_executable(GeometryVibes3D-PicoCalc
     src/app/SavedGamesState.cpp
     src/app/LevelSelectState.cpp
     src/app/StatusOverlayView.cpp
+    src/core/Fixed.cpp
     src/game/Hud.cpp
     src/game/Game.cpp
     src/game/SceneBuilder.cpp

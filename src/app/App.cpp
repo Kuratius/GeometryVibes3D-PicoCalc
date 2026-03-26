@@ -5,6 +5,8 @@
 #include <cstdio>
 
 
+namespace gv {
+
 namespace {
     
 constexpr uint32_t kFrameUs = 33333;      // ~30 FPS
@@ -81,14 +83,12 @@ inline bool keyToChar(uint8_t key, char& out) {
 
 } // anon
 
-namespace gv {
-
 int App::run(IPlatform* platform) {
     plat_ = platform;
     init(*plat_);
 
     uint32_t accumUs = 0;
-    ::BatteryFooterCache batteryCache{};
+    BatteryFooterCache batteryCache{};
 
     while (true) {
         uint32_t dtUs = plat_->dtUs();
@@ -111,7 +111,7 @@ int App::run(IPlatform* platform) {
         if (currentState_) {
             currentState_->update(*this, in, kFrameUs);
             auto& display = plat_->display();
-            ::updateBatteryFooter(statusOverlay_, *plat_, batteryCache, kFrameUs);
+            updateBatteryFooter(statusOverlay_, *plat_, batteryCache, kFrameUs);
             if (currentState_->rendersDirectly()) {
                 currentState_->renderDirect(*this, display);
                 continue;
@@ -487,7 +487,7 @@ InputState App::pollInput() const {
     for (uint16_t key = 0x20; key <= 0x7E; ++key) {
         if (kb.pressed(static_cast<uint8_t>(key))) {
             char c = '\0';
-            if (::keyToChar(static_cast<uint8_t>(key), c)) {
+            if (keyToChar(static_cast<uint8_t>(key), c)) {
                 in.typedChar = c;
                 break;
             }

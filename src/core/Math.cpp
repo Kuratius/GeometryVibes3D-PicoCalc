@@ -1,6 +1,6 @@
 #include "core/Math.hpp"
 #include "Math.hpp"
-
+#include <cmath>
 namespace gv {
 
 static inline uint32_t isqrt_cpp_impl(uint32_t x) {
@@ -32,6 +32,9 @@ static inline uint32_t isqrt_cpp_impl(uint32_t x) {
 }
 
 uint16_t isqrt32(uint32_t x) {
+
+    if (__builtin_constant_p(x))
+        return (uint16_t)sqrt((double)x);
 #if defined(__GNUC__) && (defined(__arm__) || defined(__thumb__))
     uint32_t r0 = x;
     uint32_t r2 = 3u << 30;

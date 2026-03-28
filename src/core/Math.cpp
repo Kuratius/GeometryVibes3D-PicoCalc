@@ -68,7 +68,7 @@ uint16_t isqrt32(uint32_t x) {
             : "cc", "r3", "r4"
         );
     }
-    //should probably be replaced with uxth
+    //the compiler will use the uxth instruction for us here
     //since we set the return value as uint16_t
     //no extra cast since gcc's cost model is wrong
     return r1;

@@ -71,7 +71,7 @@ fx fx::sinTurns(fx turns) {
 
 void fx::sinCosTurns(fx turns, fx& c, fx& s) {
     c = cosTurnsLut(turns);
-    s = cosTurnsLut(turns - fx::fromRatio(1, 4));
+    s = cosTurnsLut(turns - kQuarterTurn);
 }
 
 } // namespace gv

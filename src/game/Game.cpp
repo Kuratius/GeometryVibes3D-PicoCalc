@@ -56,14 +56,6 @@ inline void inverseScalePointAround(gv::fx& x, gv::fx& y,
     y = oy + (y - oy) / scale;
 }
 
-static inline int ceilSqrtInt(int n) {
-    int r = 0;
-    while (r * r < n) {
-        ++r;
-    }
-    return r;
-}
-
 inline int computeAnimSearchPadCells(const gv::Game& game) {
     int maxRadiusSq = 0;
 
@@ -92,7 +84,10 @@ inline int computeAnimSearchPadCells(const gv::Game& game) {
         }
     }
 
-    const int maxRadiusHalfCells = ceilSqrtInt(maxRadiusSq);
+    const uint32_t root = gv::isqrt32(uint32_t(maxRadiusSq));
+    const int maxRadiusHalfCells =
+        (int(root * root) == maxRadiusSq) ? int(root) : int(root) + 1;
+
     return (maxRadiusHalfCells + 1) / 2 + 1;
 }
 

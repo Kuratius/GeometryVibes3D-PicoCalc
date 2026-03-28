@@ -1,0 +1,75 @@
+#include "core/Math.hpp"
+#include "Math.hpp"
+
+namespace gv {
+
+static inline uint32_t isqrt_cpp_impl(uint32_t x) {
+    const uint32_t bias = 3u << 30;
+    uint32_t acc = 1u << 30;
+
+    int start = 0;
+    if ((x >> 8) == 0) {
+        start = 12;
+    } else if ((x >> 16) == 0) {
+        start = 8;
+    } else if ((x >> 24) == 0) {
+        start = 4;
+    }
+
+    for (int shift = start; shift <= 30; shift += 2) {
+        const uint32_t trial = (acc >> (unsigned)shift) |
+                               (acc << ((32u - (unsigned)shift) & 31u));
+        const uint32_t take = (x >= trial);
+
+        if (take) {
+            x -= trial;
+        }
+
+        acc = (acc << 1) + bias + take;
+    }
+
+    return acc & 0x3fffffffu;
+}
+
+uint32_t isqrt32(uint32_t x) {
+#if defined(__GNUC__) && (defined(__arm__) || defined(__thumb__))
+    uint32_t r0 = x;
+    uint32_t r2 = 3u << 30;
+    uint32_t r1 = 1u << 30;
+    int start = 0;
+
+    if ((r0 >> 8) == 0) {
+        start = 4 * 3;
+    } else if ((r0 >> 16) == 0) {
+        start = 4 * 2;
+    } else if ((r0 >> 24) == 0) {
+        start = 4 * 1;
+    }
+
+    // Kept as Kuratius' asm because GCC still leaves a little on the table here on M0+.
+    for (int i = start; i <= 30; i += 2) {
+        asm volatile(
+            ".syntax unified            \n\t"
+            "movs     r4, %[i]          \n\t"
+            "movs     r3, %[r1]         \n\t"
+            "rors     r3, r4            \n\t"
+            "lsls     r4, %[r1], #1     \n\t"
+            "cmp      %[r0], r3         \n\t"
+            "bcc      1f                \n\t"
+            "subs     %[r0], %[r0], r3  \n\t"
+            "1:                         \n\t"
+            "adcs     r4, %[r2]         \n\t"
+            "movs     %[r1], r4         \n\t"
+            : [r0] "+&l"(r0), [r1] "+&l"(r1)
+            : [i] "lI"(i), [r2] "l"(r2)
+            : "cc", "r3", "r4"
+        );
+    }
+
+    return r1 & 0x3fffffffu;
+#else
+    return isqrt_cpp_impl(x);
+#endif
+}
+
+} // namespace gv
